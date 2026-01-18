@@ -7,6 +7,7 @@ interface ItemGridProps {
   items: Item[];
   viewMode: ViewMode;
   selectedIds: Set<string>;
+  searchQuery?: string;
   onSelect: (itemId: string, modifiers: { meta: boolean; shift: boolean }) => void;
   onOpen: (item: Item) => void;
   onToggleFavorite: (itemId: string) => void;
@@ -24,6 +25,7 @@ export function ItemGrid({
   items,
   viewMode,
   selectedIds,
+  searchQuery,
   onSelect,
   onOpen,
   onToggleFavorite,
@@ -48,10 +50,21 @@ export function ItemGrid({
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-text-muted mb-2">No items yet</p>
-          <p className="text-sm text-text-subtle">
-            Drag and drop images here or use the Add button
-          </p>
+          {searchQuery ? (
+            <>
+              <p className="text-text-muted mb-2">No results found</p>
+              <p className="text-sm text-text-subtle">
+                Try a different search term
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-text-muted mb-2">No items yet</p>
+              <p className="text-sm text-text-subtle">
+                Drag and drop images here or use the Add button
+              </p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -76,6 +89,7 @@ export function ItemGrid({
                 item={item}
                 isSelected={selectedIds.has(item.id)}
                 selectedCount={selectedIds.size}
+                searchQuery={searchQuery}
                 onSelect={onSelect}
                 onOpen={onOpen}
                 onToggleFavorite={onToggleFavorite}

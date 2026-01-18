@@ -18,6 +18,7 @@ interface ItemCardProps {
   item: Item;
   isSelected: boolean;
   selectedCount: number;
+  searchQuery?: string;
   onSelect: (itemId: string, modifiers: { meta: boolean; shift: boolean }) => void;
   onOpen: (item: Item) => void;
   onToggleFavorite: (itemId: string) => void;
@@ -30,10 +31,33 @@ interface ItemCardProps {
   libraryPath: string | null;
 }
 
+// Highlight matching text in search results
+function HighlightedText({ text, query }: { text: string; query?: string }) {
+  if (!query || !text) {
+    return <>{text}</>;
+  }
+
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="bg-primary/30 text-text rounded-sm px-0.5">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 export function ItemCard({
   item,
   isSelected,
   selectedCount,
+  searchQuery,
   onSelect,
   onOpen,
   onToggleFavorite,
@@ -194,7 +218,7 @@ export function ItemCard({
           {/* Title Area */}
           <div className="p-3">
             <p className="text-sm text-text truncate font-medium">
-              {item.title || "Untitled"}
+              <HighlightedText text={item.title || "Untitled"} query={searchQuery} />
             </p>
             {item.tags && item.tags.length > 0 && (
               <div className="flex gap-1 mt-2 flex-wrap">

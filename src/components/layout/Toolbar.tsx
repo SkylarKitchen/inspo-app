@@ -103,8 +103,20 @@ export function Toolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search items... (⌘F)"
-          className="pl-9 h-9 bg-background border-border rounded-lg focus:ring-2 focus:ring-primary-subtle focus:border-primary transition-all"
+          className={cn(
+            "pl-9 h-9 bg-background border-border rounded-lg focus:ring-2 focus:ring-primary-subtle focus:border-primary transition-all",
+            searchQuery && "pr-9"
+          )}
         />
+        {searchQuery && (
+          <button
+            onClick={() => onSearchChange("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-surface-hover transition-colors"
+            title="Clear search"
+          >
+            <X className="w-4 h-4 text-text-muted hover:text-text" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1" />

@@ -63,6 +63,7 @@ function App() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
   const [isLoading, setIsLoading] = useState(false);
@@ -131,6 +132,15 @@ function App() {
   // Check for existing library on mount
   useEffect(() => {
     const checkLibrary = async () => {
+      // Check if running in Tauri context
+      // @ts-expect-error - __TAURI_INTERNALS__ is injected by Tauri
+      const hasTauri = typeof window.__TAURI_INTERNALS__?.invoke === "function";
+      if (!hasTauri) {
+        console.log("Not running in Tauri context - skipping library check");
+        setIsCheckingLibrary(false);
+        return;
+      }
+
       try {
         const isOpen = await tauri.isLibraryOpen();
         if (isOpen) {
@@ -169,6 +179,14 @@ function App() {
     loadData();
   }, [isLibraryOpen]);
 
+  // Debounce search query (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Load items when filter changes
   useEffect(() => {
     if (!isLibraryOpen) return;
@@ -179,7 +197,7 @@ function App() {
         const filter: Parameters<typeof tauri.getItems>[0] = {
           sortBy: sortBy as "created_at" | "updated_at" | "title",
           sortOrder,
-          searchQuery: searchQuery || undefined,
+          searchQuery: debouncedSearchQuery || undefined,
         };
 
         if (currentView === "favorites") {
@@ -204,7 +222,7 @@ function App() {
     };
 
     loadItems();
-  }, [isLibraryOpen, currentView, currentFolderId, currentTagId, sortBy, sortOrder, searchQuery]);
+  }, [isLibraryOpen, currentView, currentFolderId, currentTagId, sortBy, sortOrder, debouncedSearchQuery]);
 
   const handleLibrarySetup = (path: string) => {
     setLibraryPath(path);
@@ -755,6 +773,7 @@ function App() {
               items={items}
               viewMode={viewMode}
               selectedIds={selectedIds}
+              searchQuery={debouncedSearchQuery}
               onSelect={handleSelectItem}
               onOpen={handleOpenItem}
               onToggleFavorite={handleToggleFavorite}
