@@ -1,0 +1,310 @@
+{
+  "project": "inspo",
+  "description": "macOS desktop app for design inspiration, built with Tauri + React",
+  "stories": [
+    {
+      "id": "INSPO-001",
+      "title": "Setup Welcome/Library Selection Screen",
+      "description": "Create the initial screen shown when no library is open. Should allow creating a new library or opening an existing .inspo folder. Use a clean, minimal design with the app's warm aesthetic.",
+      "acceptance_criteria": [
+        "Shows when app launches with no library",
+        "Button to create new library (triggers native folder picker)",
+        "Button to open existing library",
+        "Recent libraries list (stored in localStorage)",
+        "Proper error handling for invalid library paths"
+      ],
+      "status": "done",
+      "priority": 1,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "core-ui"
+      ]
+    },
+    {
+      "id": "INSPO-002",
+      "title": "Resizable Sidebar with Folder Tree",
+      "description": "Implement the sidebar with All Items, Favorites, Trash sections, and a collapsible folder tree. Sidebar should be resizable with drag handle.",
+      "acceptance_criteria": [
+        "Fixed sections: All Items, Favorites, Trash",
+        "Folder tree from backend data",
+        "Expand/collapse folders",
+        "Drag handle to resize sidebar (min 180px, max 400px)",
+        "Persist sidebar width in localStorage",
+        "Visual feedback for selected item"
+      ],
+      "status": "done",
+      "priority": 2,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "core-ui"
+      ]
+    },
+    {
+      "id": "INSPO-003",
+      "title": "Item Grid View with Thumbnails",
+      "description": "Display items in a responsive grid with thumbnail previews. Support different item types (images, bookmarks) with appropriate visual treatment.",
+      "acceptance_criteria": [
+        "Responsive grid layout (CSS Grid)",
+        "Thumbnail images load from Tauri asset protocol",
+        "Different card styles for images vs bookmarks",
+        "Loading skeleton while thumbnails load",
+        "Hover state shows item title",
+        "Empty state when no items"
+      ],
+      "status": "done",
+      "priority": 2,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "core-ui"
+      ]
+    },
+    {
+      "id": "INSPO-004",
+      "title": "Item Selection (Single, Multi, Range)",
+      "description": "Implement item selection patterns: click to select, Cmd+click for multi-select, Shift+click for range select.",
+      "acceptance_criteria": [
+        "Click selects single item (deselects others)",
+        "Cmd+click toggles item selection",
+        "Shift+click selects range from last selected",
+        "Visual selection indicator (border/overlay)",
+        "Selection count shown in toolbar",
+        "Escape key clears selection"
+      ],
+      "status": "done",
+      "priority": 3,
+      "estimate": "small",
+      "tags": [
+        "frontend",
+        "interaction"
+      ]
+    },
+    {
+      "id": "INSPO-005",
+      "title": "Drag & Drop Import from Finder",
+      "description": "Allow dragging files from Finder into the app to import them. Show drop zone visual feedback.",
+      "acceptance_criteria": [
+        "Drop zone appears when dragging files over app",
+        "Accepts image files (png, jpg, gif, webp)",
+        "Calls import_image Tauri command",
+        "Shows progress/success feedback",
+        "Imports to currently selected folder",
+        "Error handling for unsupported files"
+      ],
+      "status": "done",
+      "priority": 3,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "import"
+      ]
+    },
+    {
+      "id": "INSPO-006",
+      "title": "URL/Bookmark Import Dialog",
+      "description": "Dialog for importing URLs as bookmarks. Fetches metadata and creates bookmark item.",
+      "acceptance_criteria": [
+        "Dialog with URL input field",
+        "Paste from clipboard button",
+        "Shows loading state while fetching metadata",
+        "Preview of fetched title/description",
+        "Folder selector for destination",
+        "Tag input (optional)",
+        "Calls import_bookmark Tauri command"
+      ],
+      "status": "todo",
+      "priority": 4,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "import"
+      ]
+    },
+    {
+      "id": "INSPO-007",
+      "title": "Item Detail Panel",
+      "description": "Slide-out or sidebar panel showing selected item details: preview, metadata, tags, and actions.",
+      "acceptance_criteria": [
+        "Shows when item is selected",
+        "Large preview image/screenshot",
+        "Editable title field",
+        "Editable description field",
+        "Tag display with add/remove",
+        "File info (size, dimensions, date)",
+        "Open in browser (for bookmarks)",
+        "Delete button"
+      ],
+      "status": "todo",
+      "priority": 4,
+      "estimate": "large",
+      "tags": [
+        "frontend",
+        "detail-view"
+      ]
+    },
+    {
+      "id": "INSPO-008",
+      "title": "Context Menu for Items",
+      "description": "Right-click context menu on items with common actions.",
+      "acceptance_criteria": [
+        "Open (image preview / URL)",
+        "Move to folder (submenu)",
+        "Add/remove tags",
+        "Copy to clipboard",
+        "Move to trash",
+        "Works on single and multi-selection"
+      ],
+      "status": "todo",
+      "priority": 5,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "interaction"
+      ]
+    },
+    {
+      "id": "INSPO-009",
+      "title": "Search with Full-Text Search",
+      "description": "Search bar that queries the SQLite FTS5 index for items matching title/description.",
+      "acceptance_criteria": [
+        "Search input in toolbar",
+        "Debounced search (300ms)",
+        "Calls search Tauri command",
+        "Highlights matching text in results",
+        "Clear search button",
+        "Cmd+F focuses search"
+      ],
+      "status": "todo",
+      "priority": 5,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "search"
+      ]
+    },
+    {
+      "id": "INSPO-010",
+      "title": "Filter by Type and Tags",
+      "description": "Filter controls to show only images, only bookmarks, or items with specific tags.",
+      "acceptance_criteria": [
+        "Type filter dropdown (All, Images, Bookmarks)",
+        "Tag filter with multi-select",
+        "Filters combine with AND logic",
+        "Active filter indicator",
+        "Clear filters button",
+        "Persists filter state during session"
+      ],
+      "status": "todo",
+      "priority": 6,
+      "estimate": "small",
+      "tags": [
+        "frontend",
+        "filtering"
+      ]
+    },
+    {
+      "id": "INSPO-011",
+      "title": "Sort Options",
+      "description": "Dropdown to sort items by date, name, or type.",
+      "acceptance_criteria": [
+        "Sort by: Date Added, Name, Type",
+        "Ascending/descending toggle",
+        "Persists sort preference",
+        "Visual indicator of current sort"
+      ],
+      "status": "todo",
+      "priority": 6,
+      "estimate": "small",
+      "tags": [
+        "frontend",
+        "filtering"
+      ]
+    },
+    {
+      "id": "INSPO-012",
+      "title": "Keyboard Shortcuts",
+      "description": "Implement common keyboard shortcuts for navigation and actions.",
+      "acceptance_criteria": [
+        "Arrow keys navigate grid",
+        "Enter opens selected item",
+        "Delete moves to trash",
+        "Cmd+A selects all",
+        "Cmd+F focuses search",
+        "Cmd+N new folder dialog",
+        "Escape clears selection/closes dialogs"
+      ],
+      "status": "todo",
+      "priority": 7,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "accessibility"
+      ]
+    },
+    {
+      "id": "INSPO-013",
+      "title": "Folder CRUD UI",
+      "description": "UI for creating, renaming, and deleting folders in the sidebar.",
+      "acceptance_criteria": [
+        "New folder button/shortcut",
+        "Inline rename on double-click",
+        "Delete folder (with confirmation)",
+        "Drag items to folders",
+        "Drag to reorder folders"
+      ],
+      "status": "todo",
+      "priority": 4,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "folders"
+      ]
+    },
+    {
+      "id": "INSPO-014",
+      "title": "Tag Management UI",
+      "description": "Interface for creating, editing, and deleting tags. Tags shown in sidebar.",
+      "acceptance_criteria": [
+        "Tags section in sidebar",
+        "Click tag to filter",
+        "Create new tag dialog",
+        "Edit tag (name, color)",
+        "Delete tag (removes from all items)",
+        "Tag color picker"
+      ],
+      "status": "todo",
+      "priority": 5,
+      "estimate": "medium",
+      "tags": [
+        "frontend",
+        "tags"
+      ]
+    },
+    {
+      "id": "INSPO-015",
+      "title": "Trash Management",
+      "description": "Trash view with restore and permanent delete options.",
+      "acceptance_criteria": [
+        "Trash section shows deleted items",
+        "Restore button moves back to original folder",
+        "Empty trash button (with confirmation)",
+        "Auto-empty after 30 days (optional setting)"
+      ],
+      "status": "todo",
+      "priority": 7,
+      "estimate": "small",
+      "tags": [
+        "frontend",
+        "core-ui"
+      ]
+    }
+  ],
+  "meta": {
+    "created_at": "2026-01-18",
+    "last_updated": "2026-01-18",
+    "total_stories": 15,
+    "completed": 5
+  }
+}

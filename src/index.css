@@ -1,0 +1,232 @@
+/* Typography - Warm Studio aesthetic */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* Warm Studio palette - cream, terracotta, chartreuse */
+  --color-background: #FAF8F5;
+  --color-background-warm: #F5F2ED;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F7F5F2;
+  --color-surface-active: #F0EDE8;
+  --color-border: #E8E4DE;
+  --color-border-subtle: #F0EDE8;
+
+  /* Warm charcoal text - never pure black */
+  --color-text: #2D2A26;
+  --color-text-muted: #6B6560;
+  --color-text-subtle: #9C958D;
+
+  /* Terracotta primary - earthy, handmade feel */
+  --color-primary: #C75B3F;
+  --color-primary-hover: #B54D32;
+  --color-primary-muted: #D4836D;
+  --color-primary-subtle: #FCEEE9;
+
+  /* Chartreuse accent - "the color that feels wrong" */
+  --color-accent: #BFFF00;
+  --color-accent-muted: #D4FF4D;
+  --color-accent-subtle: #F4FFCC;
+
+  /* Semantic colors - warmer variants */
+  --color-success: #4A9B6E;
+  --color-warning: #D4923A;
+  --color-danger: #C75B3F;
+  --color-favorite: #C75B3F;
+
+  /* Sidebar - slightly warmer than main background */
+  --color-sidebar: #F5F2ED;
+  --color-sidebar-hover: #EBE7E1;
+  --color-sidebar-active: #C75B3F;
+
+  /* Font families - type with funk */
+  --font-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Monaco, monospace;
+
+  /* Radius - intentional variation */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  /* Warm shadows - tinted, not black */
+  --shadow-sm: 0 1px 2px 0 rgb(45 42 38 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(45 42 38 / 0.08), 0 2px 4px -2px rgb(45 42 38 / 0.04);
+  --shadow-lg: 0 12px 24px -4px rgb(45 42 38 / 0.12), 0 4px 8px -2px rgb(45 42 38 / 0.06);
+  --shadow-card: 0 2px 8px -2px rgb(45 42 38 / 0.06), 0 0 0 1px rgb(45 42 38 / 0.03);
+  --shadow-card-hover: 0 8px 24px -4px rgb(45 42 38 / 0.12), 0 0 0 1px rgb(199 91 63 / 0.15);
+
+  /* Animations */
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-in: slide-in 0.25s ease-out;
+  --animate-scale-in: scale-in 0.2s ease-out;
+  --animate-lift: lift 0.2s ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes lift {
+    from { transform: translateY(0); }
+    to { transform: translateY(-2px); }
+  }
+
+  @keyframes grain {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-5%, -10%); }
+    20% { transform: translate(-15%, 5%); }
+    30% { transform: translate(7%, -25%); }
+    40% { transform: translate(-5%, 25%); }
+    50% { transform: translate(-15%, 10%); }
+    60% { transform: translate(15%, 0%); }
+    70% { transform: translate(0%, 15%); }
+    80% { transform: translate(3%, 35%); }
+    90% { transform: translate(-10%, 10%); }
+  }
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
+  font-feature-settings: "ss01" on, "cv01" on;
+}
+
+/* Film grain overlay - analog texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Display font utility */
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Custom scrollbar - warm and subtle */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subtle);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Tauri window drag region */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Focus styles - warm primary ring */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Selection - terracotta highlight */
+::selection {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary-hover);
+}
+
+/* Prevent text selection on interactive elements */
+button,
+[role="button"],
+.no-select {
+  user-select: none;
+}
+
+/* Image rendering */
+img {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Card hover lift effect */
+.card-hover {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Staggered grid animation */
+@keyframes grid-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.grid-item-animate {
+  animation: grid-item-in 0.3s ease-out backwards;
+}
+
+/* Section header decorative line */
+.section-header::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  margin-left: 0.75rem;
+}
