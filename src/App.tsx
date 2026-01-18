@@ -410,6 +410,44 @@ function App() {
     }
   };
 
+  // Multi-selection handlers for context menu
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      for (const itemId of ids) {
+        await tauri.deleteItem(itemId);
+      }
+      setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+      if (detailItem && selectedIds.has(detailItem.id)) {
+        setIsDetailOpen(false);
+        setDetailItem(null);
+      }
+      setSelectedIds(new Set());
+      const statsData = await tauri.getLibraryStats();
+      setStats(statsData);
+    } catch (err) {
+      console.error("Failed to delete items:", err);
+    }
+  };
+
+  const handleMoveSelectedToFolder = async (folderId: string | null) => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      await tauri.moveItemsToFolder(ids, folderId);
+      setItems((prev) =>
+        prev.map((item) =>
+          selectedIds.has(item.id) ? { ...item, folderId } : item
+        )
+      );
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+    } catch (err) {
+      console.error("Failed to move items:", err);
+    }
+  };
+
   const handleAddTag = (itemId: string) => {
     setTagPickerItemId(itemId);
   };
@@ -721,7 +759,9 @@ function App() {
               onOpen={handleOpenItem}
               onToggleFavorite={handleToggleFavorite}
               onDelete={handleDeleteItem}
+              onDeleteSelected={handleDeleteSelected}
               onMoveToFolder={handleMoveToFolder}
+              onMoveSelectedToFolder={handleMoveSelectedToFolder}
               onAddTag={handleAddTag}
               folders={folders}
               libraryPath={libraryPath}

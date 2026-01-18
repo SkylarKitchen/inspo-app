@@ -11,7 +11,9 @@ interface ItemGridProps {
   onOpen: (item: Item) => void;
   onToggleFavorite: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onDeleteSelected?: () => void;
   onMoveToFolder: (itemId: string, folderId: string | null) => void;
+  onMoveSelectedToFolder?: (folderId: string | null) => void;
   onAddTag: (itemId: string) => void;
   folders: Folder[];
   libraryPath: string | null;
@@ -26,7 +28,9 @@ export function ItemGrid({
   onOpen,
   onToggleFavorite,
   onDelete,
+  onDeleteSelected,
   onMoveToFolder,
+  onMoveSelectedToFolder,
   onAddTag,
   folders,
   libraryPath,
@@ -71,11 +75,14 @@ export function ItemGrid({
               <ItemCard
                 item={item}
                 isSelected={selectedIds.has(item.id)}
+                selectedCount={selectedIds.size}
                 onSelect={onSelect}
                 onOpen={onOpen}
                 onToggleFavorite={onToggleFavorite}
                 onDelete={onDelete}
+                onDeleteSelected={onDeleteSelected}
                 onMoveToFolder={onMoveToFolder}
+                onMoveSelectedToFolder={onMoveSelectedToFolder}
                 onAddTag={onAddTag}
                 folders={folders}
                 libraryPath={libraryPath}

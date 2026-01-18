@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, Link, ExternalLink, Trash2, FolderInput, Tag } from "lucide-react";
+import { Heart, Link, ExternalLink, Trash2, FolderInput, Tag, Copy, Clipboard } from "lucide-react";
 import { cn, getDomainFromUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,11 +17,14 @@ import type { Item, Folder } from "@/types";
 interface ItemCardProps {
   item: Item;
   isSelected: boolean;
+  selectedCount: number;
   onSelect: (itemId: string, modifiers: { meta: boolean; shift: boolean }) => void;
   onOpen: (item: Item) => void;
   onToggleFavorite: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onDeleteSelected?: () => void;
   onMoveToFolder: (itemId: string, folderId: string | null) => void;
+  onMoveSelectedToFolder?: (folderId: string | null) => void;
   onAddTag: (itemId: string) => void;
   folders: Folder[];
   libraryPath: string | null;
@@ -30,15 +33,20 @@ interface ItemCardProps {
 export function ItemCard({
   item,
   isSelected,
+  selectedCount,
   onSelect,
   onOpen,
   onToggleFavorite,
   onDelete,
+  onDeleteSelected,
   onMoveToFolder,
+  onMoveSelectedToFolder,
   onAddTag,
   folders,
   libraryPath,
 }: ItemCardProps) {
+  // When item is selected and there are multiple selections, actions should apply to all
+  const isMultiSelection = isSelected && selectedCount > 1;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -74,6 +82,16 @@ export function ItemCard({
   };
 
   const imageUrl = getThumbnailUrl() || getFileUrl();
+
+  const handleCopyUrl = async () => {
+    if (item.url) {
+      await navigator.clipboard.writeText(item.url);
+    }
+  };
+
+  const handleCopyTitle = async () => {
+    await navigator.clipboard.writeText(item.title || "Untitled");
+  };
 
   return (
     <ContextMenu>
@@ -216,17 +234,17 @@ export function ItemCard({
         <ContextMenuSub>
           <ContextMenuSubTrigger>
             <FolderInput className="w-4 h-4 mr-2" />
-            Move to Folder
+            {isMultiSelection ? `Move ${selectedCount} Items` : "Move to Folder"}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem onClick={() => onMoveToFolder(item.id, null)}>
+            <ContextMenuItem onClick={() => isMultiSelection && onMoveSelectedToFolder ? onMoveSelectedToFolder(null) : onMoveToFolder(item.id, null)}>
               No Folder
             </ContextMenuItem>
             <ContextMenuSeparator />
             {folders.map((folder) => (
               <ContextMenuItem
                 key={folder.id}
-                onClick={() => onMoveToFolder(item.id, folder.id)}
+                onClick={() => isMultiSelection && onMoveSelectedToFolder ? onMoveSelectedToFolder(folder.id) : onMoveToFolder(item.id, folder.id)}
               >
                 {folder.name}
               </ContextMenuItem>
@@ -237,13 +255,31 @@ export function ItemCard({
           <Tag className="w-4 h-4 mr-2" />
           Add Tags
         </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Copy className="w-4 h-4 mr-2" />
+            Copy
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={handleCopyTitle}>
+              <Clipboard className="w-4 h-4 mr-2" />
+              Copy Title
+            </ContextMenuItem>
+            {item.url && (
+              <ContextMenuItem onClick={handleCopyUrl}>
+                <Link className="w-4 h-4 mr-2" />
+                Copy URL
+              </ContextMenuItem>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
         <ContextMenuSeparator />
         <ContextMenuItem
-          onClick={() => onDelete(item.id)}
+          onClick={() => isMultiSelection && onDeleteSelected ? onDeleteSelected() : onDelete(item.id)}
           className="text-danger focus:text-danger"
         >
           <Trash2 className="w-4 h-4 mr-2" />
-          Delete
+          {isMultiSelection ? `Delete ${selectedCount} Items` : "Move to Trash"}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
