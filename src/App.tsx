@@ -19,6 +19,7 @@ import { DropZone } from "@/components/items/DropZone";
 import { SetupWizard } from "@/components/SetupWizard";
 import { ItemDetailPanel } from "@/components/detail/ItemDetailPanel";
 import { TagPickerDialog } from "@/components/dialogs/TagPickerDialog";
+import { BookmarkImportDialog } from "@/components/dialogs/BookmarkImportDialog";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { ImportToast, type ImportToastState } from "@/components/ui/import-toast";
 import {
@@ -79,7 +80,6 @@ function App() {
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderParentId, setNewFolderParentId] = useState<string | undefined>();
   const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
-  const [bookmarkUrl, setBookmarkUrl] = useState("");
   const [newTagDialogOpen, setNewTagDialogOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [tagPickerItemId, setTagPickerItemId] = useState<string | null>(null);
@@ -562,27 +562,13 @@ function App() {
   };
 
   const handleAddBookmark = () => {
-    setBookmarkUrl("");
     setBookmarkDialogOpen(true);
   };
 
-  const handleSubmitBookmark = async () => {
-    if (!bookmarkUrl.trim()) return;
-
-    try {
-      const imported = await tauri.importBookmark(
-        bookmarkUrl.trim(),
-        undefined,
-        undefined,
-        currentFolderId || undefined
-      );
-      setItems((prev) => [imported, ...prev]);
-      const statsData = await tauri.getLibraryStats();
-      setStats(statsData);
-      setBookmarkDialogOpen(false);
-    } catch (err) {
-      console.error("Failed to import bookmark:", err);
-    }
+  const handleBookmarkImported = async (item: Item) => {
+    setItems((prev) => [item, ...prev]);
+    const statsData = await tauri.getLibraryStats();
+    setStats(statsData);
   };
 
   const getViewTitle = () => {
@@ -751,28 +737,14 @@ function App() {
         </Dialog>
 
         {/* Bookmark Dialog */}
-        <Dialog open={bookmarkDialogOpen} onOpenChange={setBookmarkDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Bookmark</DialogTitle>
-            </DialogHeader>
-            <Input
-              value={bookmarkUrl}
-              onChange={(e) => setBookmarkUrl(e.target.value)}
-              placeholder="https://example.com"
-              onKeyDown={(e) => e.key === "Enter" && handleSubmitBookmark()}
-              autoFocus
-            />
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setBookmarkDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmitBookmark} disabled={!bookmarkUrl.trim()}>
-                Add
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <BookmarkImportDialog
+          isOpen={bookmarkDialogOpen}
+          onClose={() => setBookmarkDialogOpen(false)}
+          onImported={handleBookmarkImported}
+          folders={folders}
+          tags={tags}
+          currentFolderId={currentFolderId}
+        />
 
         {/* Item Detail Panel */}
         <ItemDetailPanel
