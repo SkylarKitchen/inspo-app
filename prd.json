@@ -156,7 +156,7 @@
         "Move to trash",
         "Works on single and multi-selection"
       ],
-      "status": "todo",
+      "status": "done",
       "priority": 5,
       "estimate": "medium",
       "tags": [
@@ -305,6 +305,6 @@
     "created_at": "2026-01-18",
     "last_updated": "2026-01-18",
     "total_stories": 15,
-    "completed": 8
+    "completed": 9
   }
 }
