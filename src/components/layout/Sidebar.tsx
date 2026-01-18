@@ -63,7 +63,7 @@ interface SidebarProps {
   onSelectFolder: (folderId: string) => void;
   onSelectTag: (tagId: string) => void;
   onCreateFolder: (parentId?: string) => void;
-  onRenameFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onCreateTag: () => void;
   onOpenSettings: () => void;
@@ -75,6 +75,9 @@ interface SidebarProps {
   };
   width: number;
   onWidthChange: (width: number) => void;
+  dragTargetFolderId?: string | null;
+  onFolderDragOver?: (folderId: string) => void;
+  onFolderDrop?: (folderId: string) => void;
 }
 
 interface FolderItemProps {
@@ -83,8 +86,12 @@ interface FolderItemProps {
   currentFolderId: string | null;
   onSelect: (folderId: string) => void;
   onCreateFolder: (parentId: string) => void;
-  onRenameFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
   onDeleteFolder: (folderId: string) => void;
+  onDragOver?: (folderId: string) => void;
+  onDrop?: (folderId: string) => void;
+  isDragTarget?: boolean;
+  dragTargetFolderId?: string | null;
 }
 
 function FolderItem({
@@ -95,21 +102,81 @@ function FolderItem({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onDragOver,
+  onDrop,
+  dragTargetFolderId,
 }: FolderItemProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(folder.name);
+  const inputRef = useRef<HTMLInputElement>(null);
   const hasChildren = folder.children && folder.children.length > 0;
   const isSelected = currentFolderId === folder.id;
+  const isDragTarget = dragTargetFolderId === folder.id;
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditName(folder.name);
+    setIsEditing(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== folder.name) {
+      onRenameFolder(folder.id, trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setEditName(folder.name);
+      setIsEditing(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDragOver?.(folder.id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDrop?.(folder.id);
+  };
 
   return (
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <button
-            onClick={() => onSelect(folder.id)}
+            onClick={() => !isEditing && onSelect(folder.id)}
+            onDoubleClick={handleDoubleClick}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={cn(
               "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg transition-all duration-150",
               "hover:bg-sidebar-hover",
-              isSelected && "bg-primary-subtle text-primary font-medium"
+              isSelected && "bg-primary-subtle text-primary font-medium",
+              isDragTarget && "bg-primary/20 ring-2 ring-primary ring-inset"
             )}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
           >
@@ -131,8 +198,21 @@ function FolderItem({
               <span className="w-4" />
             )}
             <Folder className={cn("w-4 h-4", isSelected ? "text-primary" : "text-text-muted")} />
-            <span className="flex-1 text-left truncate">{folder.name}</span>
-            {folder.itemCount > 0 && (
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={handleKeyDown}
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 px-1 py-0 text-sm bg-background border border-primary rounded outline-none"
+              />
+            ) : (
+              <span className="flex-1 text-left truncate">{folder.name}</span>
+            )}
+            {!isEditing && folder.itemCount > 0 && (
               <span className={cn("text-xs tabular-nums", isSelected ? "text-primary-muted" : "text-text-subtle")}>{folder.itemCount}</span>
             )}
           </button>
@@ -142,7 +222,10 @@ function FolderItem({
             <FolderPlus className="w-4 h-4 mr-2" />
             New Subfolder
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => onRenameFolder(folder.id)}>
+          <ContextMenuItem onClick={() => {
+            setEditName(folder.name);
+            setIsEditing(true);
+          }}>
             Rename
           </ContextMenuItem>
           <ContextMenuSeparator />
@@ -166,6 +249,9 @@ function FolderItem({
               onCreateFolder={onCreateFolder}
               onRenameFolder={onRenameFolder}
               onDeleteFolder={onDeleteFolder}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              dragTargetFolderId={dragTargetFolderId}
             />
           ))}
         </div>
@@ -191,6 +277,9 @@ export function Sidebar({
   stats,
   width,
   onWidthChange,
+  dragTargetFolderId,
+  onFolderDragOver,
+  onFolderDrop,
 }: SidebarProps) {
   const [foldersExpanded, setFoldersExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
@@ -313,6 +402,9 @@ export function Sidebar({
                     onCreateFolder={onCreateFolder}
                     onRenameFolder={onRenameFolder}
                     onDeleteFolder={onDeleteFolder}
+                    onDragOver={onFolderDragOver}
+                    onDrop={onFolderDrop}
+                    dragTargetFolderId={dragTargetFolderId}
                   />
                 ))}
                 {folders.length === 0 && (

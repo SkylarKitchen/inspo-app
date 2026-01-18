@@ -53,6 +53,15 @@ export function ItemCard({
     onOpen(item);
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("text/plain", item.id);
+    e.dataTransfer.effectAllowed = "move";
+    // Select this item if not already selected (for single item drag)
+    if (!isSelected) {
+      onSelect(item.id, { meta: false, shift: false });
+    }
+  };
+
   const getThumbnailUrl = () => {
     if (!libraryPath || !item.thumbnailPath) return null;
     // Convert to Tauri asset protocol URL
@@ -72,6 +81,8 @@ export function ItemCard({
         <div
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
+          onDragStart={handleDragStart}
+          draggable
           className={cn(
             "group relative bg-surface rounded-xl overflow-hidden cursor-pointer card-hover",
             "shadow-card",

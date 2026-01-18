@@ -460,22 +460,61 @@ function App() {
     }
   };
 
-  const handleRenameFolder = (folderId: string) => {
-    // TODO: Open rename dialog
-    console.log("Rename folder:", folderId);
-  };
-
-  const handleDeleteFolder = async (folderId: string) => {
+  const handleRenameFolder = async (folderId: string, newName: string) => {
     try {
-      await tauri.deleteFolder(folderId);
+      await tauri.renameFolder(folderId, newName);
       const foldersData = await tauri.getFolders();
       setFolders(foldersData);
-      if (currentFolderId === folderId) {
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+    }
+  };
+
+  const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<string | null>(null);
+  const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
+
+  const handleDeleteFolder = (folderId: string) => {
+    setDeleteConfirmFolderId(folderId);
+  };
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteConfirmFolderId) return;
+    try {
+      await tauri.deleteFolder(deleteConfirmFolderId);
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+      if (currentFolderId === deleteConfirmFolderId) {
         setCurrentView("all");
         setCurrentFolderId(null);
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+    } finally {
+      setDeleteConfirmFolderId(null);
+    }
+  };
+
+  const handleFolderDragOver = (folderId: string) => {
+    setDragTargetFolderId(folderId);
+  };
+
+  const handleFolderDrop = async (folderId: string) => {
+    if (selectedIds.size === 0) {
+      setDragTargetFolderId(null);
+      return;
+    }
+    try {
+      const itemIds = Array.from(selectedIds) as string[];
+      await tauri.moveItemsToFolder(itemIds, folderId);
+      const itemsData = await tauri.getItems();
+      setItems(itemsData);
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Failed to move items to folder:", err);
+    } finally {
+      setDragTargetFolderId(null);
     }
   };
 
@@ -642,6 +681,9 @@ function App() {
           stats={stats}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
+          dragTargetFolderId={dragTargetFolderId}
+          onFolderDragOver={handleFolderDragOver}
+          onFolderDrop={handleFolderDrop}
         />
 
         {/* Main Content */}
@@ -731,6 +773,26 @@ function App() {
               </Button>
               <Button onClick={handleSubmitNewTag} disabled={!newTagName.trim()}>
                 Create
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Folder Confirmation */}
+        <Dialog open={deleteConfirmFolderId !== null} onOpenChange={() => setDeleteConfirmFolderId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Folder</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-text-muted">
+              Are you sure you want to delete this folder? Items inside will be moved to the root level.
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteConfirmFolderId(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteFolder}>
+                Delete
               </Button>
             </DialogFooter>
           </DialogContent>
