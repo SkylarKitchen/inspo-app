@@ -30,13 +30,20 @@
       "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;",
       "assetProtocol": {
         "enable": true,
-        "scope": [
-          "$HOME/**",
-          "$DOCUMENT/**",
-          "$DESKTOP/**",
-          "$DOWNLOAD/**",
-          "/Users/**"
-        ]
+        "scope": {
+          "allow": [
+            "$HOME/**",
+            "$HOME/.*/**",
+            "$DOCUMENT/**",
+            "$DOCUMENT/.*/**",
+            "$DESKTOP/**",
+            "$DOWNLOAD/**",
+            "/Users/**",
+            "/Users/*/.*/**",
+            "/Users/*/**/.*/**"
+          ],
+          "requireLiteralLeadingDot": false
+        }
       }
     }
   },
