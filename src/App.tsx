@@ -805,7 +805,7 @@ function App() {
     }
   };
 
-  const handleFilesDropped = async (paths: string[], skippedCount: number = 0) => {
+  const handleFilesDropped = useCallback(async (paths: string[], skippedCount: number = 0) => {
     if (paths.length === 0) {
       if (skippedCount > 0) {
         setImportToast({
@@ -846,7 +846,7 @@ function App() {
         details: err instanceof Error ? err.message : "Unknown error",
       });
     }
-  };
+  }, [currentFolderId]);
 
   const handleImportFiles = async () => {
     try {

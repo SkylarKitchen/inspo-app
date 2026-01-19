@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Upload } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 
@@ -15,17 +15,26 @@ interface DragPayload {
 
 export function DropZone({ onFilesDropped, children, disabled }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  // Use ref to store callback so listener doesn't need to be re-registered
+  const onFilesDroppedRef = useRef(onFilesDropped);
+
+  // Update ref in effect to avoid lint warning about ref access during render
+  useEffect(() => {
+    onFilesDroppedRef.current = onFilesDropped;
+  }, [onFilesDropped]);
 
   useEffect(() => {
     if (disabled) return;
 
+    let isCancelled = false;
     let unlistenDrop: (() => void) | undefined;
     let unlistenEnter: (() => void) | undefined;
     let unlistenLeave: (() => void) | undefined;
 
     const setupListeners = async () => {
       // Listen for file drops (Tauri v2 event)
-      unlistenDrop = await listen<DragPayload>("tauri://drag-drop", (event) => {
+      const dropUnlisten = await listen<DragPayload>("tauri://drag-drop", (event) => {
+        if (isCancelled) return;
         setIsDragOver(false);
         const paths = event.payload.paths;
 
@@ -38,17 +47,25 @@ export function DropZone({ onFilesDropped, children, disabled }: DropZoneProps) 
 
         // Always report result even if empty
         if (paths.length > 0) {
-          onFilesDropped(imagePaths, skippedCount);
+          onFilesDroppedRef.current(imagePaths, skippedCount);
         }
       });
+      if (isCancelled) { dropUnlisten(); return; }
+      unlistenDrop = dropUnlisten;
 
-      unlistenEnter = await listen<DragPayload>("tauri://drag-enter", () => {
+      const enterUnlisten = await listen<DragPayload>("tauri://drag-enter", () => {
+        if (isCancelled) return;
         setIsDragOver(true);
       });
+      if (isCancelled) { enterUnlisten(); return; }
+      unlistenEnter = enterUnlisten;
 
-      unlistenLeave = await listen<null>("tauri://drag-leave", () => {
+      const leaveUnlisten = await listen<null>("tauri://drag-leave", () => {
+        if (isCancelled) return;
         setIsDragOver(false);
       });
+      if (isCancelled) { leaveUnlisten(); return; }
+      unlistenLeave = leaveUnlisten;
     };
 
     setupListeners();
@@ -63,13 +80,14 @@ export function DropZone({ onFilesDropped, children, disabled }: DropZoneProps) 
     window.addEventListener("drop", preventDefault);
 
     return () => {
+      isCancelled = true;
       if (unlistenDrop) unlistenDrop();
       if (unlistenEnter) unlistenEnter();
       if (unlistenLeave) unlistenLeave();
       window.removeEventListener("dragover", preventDefault);
       window.removeEventListener("drop", preventDefault);
     };
-  }, [disabled, onFilesDropped]);
+  }, [disabled]); // Remove onFilesDropped from deps - use ref instead
 
   return (
     <div className="relative flex-1 flex flex-col">
