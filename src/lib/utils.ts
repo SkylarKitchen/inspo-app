@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -37,11 +38,17 @@ export function getDomainFromUrl(url: string): string {
 
 /**
  * Converts a local file path to a URL that can be loaded by the webview.
- * Handles the nuances of Tauri v2 asset protocol on different platforms.
+ * Uses Tauri's official convertFileSrc for proper platform handling.
  */
 export function convertToLocalSrc(filePath: string): string {
-  // On macOS/iOS in Tauri v2, using the http scheme with asset.localhost is the standard.
-  // We must preserve the path structure (slashes) while encoding special characters in segments.
-  const path = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  return `http://asset.localhost${path}`;
+  try {
+    const url = convertFileSrc(filePath);
+    console.log('convertFileSrc result:', { filePath, url });
+    return url;
+  } catch (e) {
+    // Fallback for non-Tauri context or errors
+    console.warn('convertFileSrc failed, using fallback:', e);
+    const path = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    return `http://asset.localhost${path}`;
+  }
 }

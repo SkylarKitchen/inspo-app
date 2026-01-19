@@ -34,7 +34,8 @@
           "$HOME/**",
           "$DOCUMENT/**",
           "$DESKTOP/**",
-          "$DOWNLOAD/**"
+          "$DOWNLOAD/**",
+          "/Users/**"
         ]
       }
     }
