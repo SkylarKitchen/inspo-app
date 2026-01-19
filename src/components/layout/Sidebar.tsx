@@ -11,6 +11,8 @@ import {
   Tag,
   Settings,
   GripVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,49 +25,27 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { Folder as FolderType, Tag as TagType } from "@/types";
-
-const SIDEBAR_WIDTH_KEY = "inspo:sidebar-width";
-const MIN_SIDEBAR_WIDTH = 180;
-const MAX_SIDEBAR_WIDTH = 400;
-const DEFAULT_SIDEBAR_WIDTH = 224; // 14rem = 224px
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function getSavedSidebarWidth(): number {
-  try {
-    const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    if (saved) {
-      const width = parseInt(saved, 10);
-      if (width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) {
-        return width;
-      }
-    }
-  } catch {
-    // Ignore localStorage errors
-  }
-  return DEFAULT_SIDEBAR_WIDTH;
-}
-
-function saveSidebarWidth(width: number): void {
-  try {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
-  } catch {
-    // Ignore localStorage errors
-  }
-}
+import {
+  MIN_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  saveSidebarWidth,
+} from "@/lib/sidebar-utils";
 
 interface SidebarProps {
   folders: FolderType[];
   tags: TagType[];
   currentFolderId: string | null;
-  currentView: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag";
+  currentView: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag" | "trash";
   currentTagId: string | null;
-  onSelectView: (view: "all" | "inbox" | "favorites" | "images" | "bookmarks") => void;
+  onSelectView: (view: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "trash") => void;
   onSelectFolder: (folderId: string) => void;
   onSelectTag: (tagId: string) => void;
   onCreateFolder: (parentId?: string) => void;
   onRenameFolder: (folderId: string, newName: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onCreateTag: () => void;
+  onEditTag: (tag: TagType) => void;
+  onDeleteTag: (tagId: string) => void;
   onOpenSettings: () => void;
   stats: {
     totalItems: number;
@@ -73,6 +53,7 @@ interface SidebarProps {
     totalBookmarks: number;
     favoritesCount: number;
   };
+  trashCount: number;
   width: number;
   onWidthChange: (width: number) => void;
   dragTargetFolderId?: string | null;
@@ -273,8 +254,11 @@ export function Sidebar({
   onRenameFolder,
   onDeleteFolder,
   onCreateTag,
+  onEditTag,
+  onDeleteTag,
   onOpenSettings,
   stats,
+  trashCount,
   width,
   onWidthChange,
   dragTargetFolderId,
@@ -325,6 +309,7 @@ export function Sidebar({
     { id: "favorites", label: "Favorites", icon: Heart, count: stats.favoritesCount },
     { id: "images", label: "Images", icon: Images, count: stats.totalImages },
     { id: "bookmarks", label: "Bookmarks", icon: Link, count: stats.totalBookmarks },
+    { id: "trash", label: "Trash", icon: Trash2, count: trashCount },
   ] as const;
 
   return (
@@ -334,7 +319,7 @@ export function Sidebar({
       style={{ width: `${width}px`, minWidth: `${MIN_SIDEBAR_WIDTH}px`, maxWidth: `${MAX_SIDEBAR_WIDTH}px` }}
     >
       {/* Titlebar drag region */}
-      <div className="h-8 titlebar-drag-region flex-shrink-0" />
+      <div data-tauri-drag-region className="h-8 titlebar-drag-region flex-shrink-0" />
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-4">
@@ -443,24 +428,41 @@ export function Sidebar({
             {tagsExpanded && (
               <div className="space-y-0.5 mt-1">
                 {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => onSelectTag(tag.id)}
-                    className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-2 text-sm rounded-lg transition-all duration-150",
-                      "hover:bg-sidebar-hover",
-                      currentTagId === tag.id && "bg-primary-subtle text-primary font-medium"
-                    )}
-                  >
-                    <div
-                      className="w-2.5 h-2.5 rounded-full ring-1 ring-black/5"
-                      style={{ backgroundColor: tag.color || "#C75B3F" }}
-                    />
-                    <span className="flex-1 text-left truncate">{tag.name}</span>
-                    {tag.itemCount > 0 && (
-                      <span className={cn("text-xs tabular-nums", currentTagId === tag.id ? "text-primary-muted" : "text-text-subtle")}>{tag.itemCount}</span>
-                    )}
-                  </button>
+                  <ContextMenu key={tag.id}>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        onClick={() => onSelectTag(tag.id)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-2.5 py-2 text-sm rounded-lg transition-all duration-150",
+                          "hover:bg-sidebar-hover",
+                          currentTagId === tag.id && "bg-primary-subtle text-primary font-medium"
+                        )}
+                      >
+                        <div
+                          className="w-2.5 h-2.5 rounded-full ring-1 ring-black/5"
+                          style={{ backgroundColor: tag.color || "#C75B3F" }}
+                        />
+                        <span className="flex-1 text-left truncate">{tag.name}</span>
+                        {tag.itemCount > 0 && (
+                          <span className={cn("text-xs tabular-nums", currentTagId === tag.id ? "text-primary-muted" : "text-text-subtle")}>{tag.itemCount}</span>
+                        )}
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={() => onEditTag(tag)}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Tag
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onClick={() => onDeleteTag(tag.id)}
+                        className="text-danger focus:text-danger"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Tag
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 ))}
                 {tags.length === 0 && (
                   <p className="px-2.5 py-2 text-xs text-text-subtle italic">No tags yet</p>

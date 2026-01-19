@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.inspo.app",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -20,14 +20,14 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
+        "decorations": false,
+        "transparent": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
     }
   },
   "bundle": {

@@ -34,6 +34,9 @@ pub fn get_items(
     );
 
     let mut conditions: Vec<String> = Vec::new();
+
+    // Always exclude trashed items from normal queries
+    conditions.push("i.deleted_at IS NULL".to_string());
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     // Handle tag filtering with join
@@ -261,10 +264,11 @@ pub fn delete_item(state: State<'_, AppState>, id: String) -> Result<(), String>
         .map_err(|e| e.to_string())?;
 
     // Delete from database
+    // We do this first to ensure the UI updates, even if file deletion fails
     conn.execute("DELETE FROM items WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
-    // Delete actual files
+    // Delete actual files - best effort
     if let Some((file_path, thumbnail_path)) = file_info {
         let library_path = state
             .library_path
@@ -275,12 +279,16 @@ pub fn delete_item(state: State<'_, AppState>, id: String) -> Result<(), String>
 
         if let Some(fp) = file_path {
             let full_path = library_path.join(&fp);
-            let _ = std::fs::remove_file(full_path);
+            if let Err(e) = std::fs::remove_file(&full_path) {
+                println!("Warning: Failed to delete file {:?}: {}", full_path, e);
+            }
         }
 
         if let Some(tp) = thumbnail_path {
             let full_path = library_path.join(&tp);
-            let _ = std::fs::remove_file(full_path);
+            if let Err(e) = std::fs::remove_file(&full_path) {
+                println!("Warning: Failed to delete thumbnail {:?}: {}", full_path, e);
+            }
         }
     }
 
@@ -337,11 +345,159 @@ pub fn move_items_to_folder(
     Ok(())
 }
 
-/// Bulk delete items
+/// Bulk delete items (hard delete - use soft_delete_items for trash)
 #[tauri::command]
 pub fn delete_items(state: State<'_, AppState>, item_ids: Vec<String>) -> Result<(), String> {
     for id in item_ids {
         delete_item(state.clone(), id)?;
     }
+    Ok(())
+}
+
+/// Soft delete items (move to trash)
+#[tauri::command]
+pub fn soft_delete_items(state: State<'_, AppState>, item_ids: Vec<String>) -> Result<(), String> {
+    let db_lock = state.db.lock().unwrap();
+    let db = db_lock.as_ref().ok_or("No library open")?;
+    let conn = db.conn.lock().unwrap();
+
+    let now = chrono::Utc::now().timestamp();
+
+    for id in item_ids {
+        conn.execute(
+            "UPDATE items SET deleted_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Get items in trash
+#[tauri::command]
+pub fn get_trashed_items(state: State<'_, AppState>) -> Result<Vec<Item>, String> {
+    let db_lock = state.db.lock().unwrap();
+    let db = db_lock.as_ref().ok_or("No library open")?;
+    let conn = db.conn.lock().unwrap();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, type, title, file_path, url, description,
+                    created_at, updated_at, folder_id, is_favorited, color_hex,
+                    width, height, file_size, thumbnail_path
+             FROM items WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let items = stmt
+        .query_map([], |row| {
+            Ok(Item {
+                id: row.get(0)?,
+                item_type: row.get(1)?,
+                title: row.get(2)?,
+                file_path: row.get(3)?,
+                url: row.get(4)?,
+                description: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+                folder_id: row.get(8)?,
+                is_favorited: row.get::<_, i32>(9)? == 1,
+                color_hex: row.get(10)?,
+                width: row.get(11)?,
+                height: row.get(12)?,
+                file_size: row.get(13)?,
+                thumbnail_path: row.get(14)?,
+                tags: Vec::new(),
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Load tags for each item
+    let mut items_with_tags = items;
+    for item in &mut items_with_tags {
+        item.tags = get_item_tags_internal(&conn, &item.id)?;
+    }
+
+    Ok(items_with_tags)
+}
+
+/// Get count of items in trash
+#[tauri::command]
+pub fn get_trash_count(state: State<'_, AppState>) -> Result<i64, String> {
+    let db_lock = state.db.lock().unwrap();
+    let db = db_lock.as_ref().ok_or("No library open")?;
+    let conn = db.conn.lock().unwrap();
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM items WHERE deleted_at IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(count)
+}
+
+/// Restore items from trash
+#[tauri::command]
+pub fn restore_items(state: State<'_, AppState>, item_ids: Vec<String>) -> Result<(), String> {
+    let db_lock = state.db.lock().unwrap();
+    let db = db_lock.as_ref().ok_or("No library open")?;
+    let conn = db.conn.lock().unwrap();
+
+    for id in item_ids {
+        conn.execute(
+            "UPDATE items SET deleted_at = NULL WHERE id = ?1",
+            [&id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Permanently delete items (from trash)
+#[tauri::command]
+pub fn permanent_delete_items(
+    state: State<'_, AppState>,
+    item_ids: Vec<String>,
+) -> Result<(), String> {
+    for id in item_ids {
+        delete_item(state.clone(), id)?;
+    }
+    Ok(())
+}
+
+/// Empty all items from trash
+#[tauri::command]
+pub fn empty_trash(state: State<'_, AppState>) -> Result<(), String> {
+    let db_lock = state.db.lock().unwrap();
+    let db = db_lock.as_ref().ok_or("No library open")?;
+    let conn = db.conn.lock().unwrap();
+
+    // Get all trashed item IDs first
+    let mut stmt = conn
+        .prepare("SELECT id FROM items WHERE deleted_at IS NOT NULL")
+        .map_err(|e| e.to_string())?;
+
+    let ids: Vec<String> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    drop(stmt);
+    drop(conn);
+    drop(db_lock);
+
+    // Delete each item
+    for id in ids {
+        delete_item(state.clone(), id)?;
+    }
+
     Ok(())
 }

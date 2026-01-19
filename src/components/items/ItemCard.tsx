@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Heart, Link, ExternalLink, Trash2, FolderInput, Tag, Copy, Clipboard } from "lucide-react";
 import { cn, getDomainFromUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { convertToLocalSrc } from "@/lib/utils";
 import type { Item, Folder } from "@/types";
 
 interface ItemCardProps {
@@ -71,8 +72,40 @@ export function ItemCard({
 }: ItemCardProps) {
   // When item is selected and there are multiple selections, actions should apply to all
   const isMultiSelection = isSelected && selectedCount > 1;
+  /* eslint-disable react-hooks/set-state-in-effect */
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+
+  const getThumbnailUrl = () => {
+    if (!libraryPath || !item.thumbnailPath) return null;
+    return convertToLocalSrc(`${libraryPath}/${item.thumbnailPath}`);
+  };
+
+  const getFileUrl = () => {
+    if (!libraryPath || !item.filePath) return null;
+    return convertToLocalSrc(`${libraryPath}/${item.filePath}`);
+  };
+
+  const thumbnailUrl = getThumbnailUrl();
+  const fileUrl = getFileUrl();
+
+  useEffect(() => {
+    setDisplayUrl(thumbnailUrl || fileUrl);
+    setImageError(false);
+    setImageLoaded(false);
+  }, [thumbnailUrl, fileUrl]);
+
+  const handleImageError = () => {
+    if (thumbnailUrl && displayUrl === thumbnailUrl && fileUrl) {
+      console.log("Thumbnail failed, falling back to full file", item.id);
+      setDisplayUrl(fileUrl);
+    } else {
+      console.error("Image load failed", item.id, displayUrl);
+      setImageError(true);
+    }
+  };
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleClick = (e: React.MouseEvent) => {
     onSelect(item.id, {
@@ -94,18 +127,16 @@ export function ItemCard({
     }
   };
 
-  const getThumbnailUrl = () => {
-    if (!libraryPath || !item.thumbnailPath) return null;
-    // Convert to Tauri asset protocol URL
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.thumbnailPath)}`;
-  };
-
-  const getFileUrl = () => {
-    if (!libraryPath || !item.filePath) return null;
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.filePath)}`;
-  };
-
-  const imageUrl = getThumbnailUrl() || getFileUrl();
+  console.log('ItemCard debug:', {
+    id: item.id,
+    title: item.title,
+    libraryPath,
+    thumbnailPath: item.thumbnailPath,
+    filePath: item.filePath,
+    thumbnailUrl: thumbnailUrl,
+    fileUrl: fileUrl,
+    displayUrl
+  });
 
   const handleCopyUrl = async () => {
     if (item.url) {
@@ -138,13 +169,13 @@ export function ItemCard({
               backgroundColor: item.colorHex || undefined,
             }}
           >
-            {item.type === "image" && imageUrl && !imageError ? (
+            {item.type === "image" && displayUrl && !imageError ? (
               <>
                 {!imageLoaded && (
                   <div className="absolute inset-0 animate-pulse bg-surface-hover" />
                 )}
                 <img
-                  src={imageUrl}
+                  src={displayUrl}
                   alt={item.title || "Image"}
                   className={cn(
                     "w-full h-full object-cover transition-all duration-300",
@@ -152,7 +183,7 @@ export function ItemCard({
                     "group-hover:scale-[1.02]"
                   )}
                   onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onError={handleImageError}
                   draggable={false}
                 />
               </>

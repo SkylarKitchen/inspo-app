@@ -34,3 +34,14 @@ export function getDomainFromUrl(url: string): string {
     return url;
   }
 }
+
+/**
+ * Converts a local file path to a URL that can be loaded by the webview.
+ * Handles the nuances of Tauri v2 asset protocol on different platforms.
+ */
+export function convertToLocalSrc(filePath: string): string {
+  // On macOS/iOS in Tauri v2, using the http scheme with asset.localhost is the standard.
+  // We must preserve the path structure (slashes) while encoding special characters in segments.
+  const path = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  return `http://asset.localhost${path}`;
+}

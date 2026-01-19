@@ -235,11 +235,18 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               {recentLibraries.map((lib) => {
                 const isLoadingThis = loadingPath === lib.path;
                 return (
-                  <button
+                  <div
                     key={lib.path}
-                    onClick={() => handleOpenRecent(lib.path)}
-                    disabled={anyLoading}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg bg-surface hover:bg-surface-hover transition-colors text-left group disabled:opacity-50"
+                    role="button"
+                    tabIndex={anyLoading ? -1 : 0}
+                    onClick={() => !anyLoading && handleOpenRecent(lib.path)}
+                    onKeyDown={(e) => {
+                      if (!anyLoading && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        handleOpenRecent(lib.path);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg bg-surface hover:bg-surface-hover transition-colors text-left group cursor-pointer ${anyLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       {isLoadingThis ? (
@@ -265,7 +272,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                         <X className="w-4 h-4 text-text-muted" />
                       </button>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

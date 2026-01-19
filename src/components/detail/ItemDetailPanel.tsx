@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { convertToLocalSrc } from "@/lib/utils";
 import type { Item, Tag as TagType } from "@/types";
 
 interface ItemDetailPanelProps {
@@ -113,12 +114,12 @@ export function ItemDetailPanel({
 
   const getImageUrl = () => {
     if (!libraryPath || !item?.filePath) return null;
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.filePath)}`;
+    return convertToLocalSrc(`${libraryPath}/${item.filePath}`);
   };
 
   const getThumbnailUrl = () => {
     if (!libraryPath || !item?.thumbnailPath) return null;
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.thumbnailPath)}`;
+    return convertToLocalSrc(`${libraryPath}/${item.thumbnailPath}`);
   };
 
   const handleCopyUrl = async () => {

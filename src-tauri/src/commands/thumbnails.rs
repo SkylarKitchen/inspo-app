@@ -35,14 +35,10 @@ pub fn generate_thumbnail(
     let thumbnail_filename = format!("{}.webp", item_id);
     let thumbnail_path = thumbnails_dir.join(&thumbnail_filename);
 
-    // Convert to RGB8 and save
-    let rgb_image = thumbnail.to_rgb8();
-
-    // Use the webp crate for encoding
-    let encoder = webp::Encoder::from_rgb(&rgb_image, thumb_width, thumb_height);
-    let webp_data = encoder.encode(80.0); // 80% quality
-
-    fs::write(&thumbnail_path, &*webp_data).map_err(|e| e.to_string())?;
+    // Use image crate to save as WebP (if feature enabled) or PNG as fallback
+    // Since we are seeing panic with webp crate, let's use standard image crate saving
+    // The previous implementation was manually using webp crate which panicked on buffer size
+    thumbnail.save(&thumbnail_path).map_err(|e| e.to_string())?;
 
     // Return relative path
     Ok(format!(".inspo/thumbnails/{}", thumbnail_filename))

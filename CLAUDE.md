@@ -79,6 +79,19 @@ MyInspo.inspo/
 - **UI:** Radix UI primitives (dialog, dropdown, tooltip, scroll-area, context-menu)
 - **Backend:** Rust with rusqlite, image crate for thumbnails, reqwest/scraper for bookmarks
 - **Icons:** Lucide React
+- **Typography:** Fraunces (display) + Instrument Sans (body)
+
+## Visual Design
+
+The app uses a "Warm Studio" aesthetic defined in `src/index.css`:
+
+- **Light mode** with warm cream background (`#FAF8F5`)
+- **Terracotta primary** (`#C75B3F`) - earthy, handmade feel
+- **Chartreuse accent** (`#BFFF00`) - intentional "color that feels wrong"
+- **Warm charcoal text** - never pure black (`#2D2A26`)
+- **Warm-tinted shadows** - rgb(45 42 38 / opacity) not pure black
+- **Film grain overlay** - subtle texture via SVG turbulence filter
+- **No gradients** - solid colors only
 
 ## Conventions
 
@@ -100,9 +113,12 @@ import * as tauri from "@/lib/tauri";
 
 ```
 src/components/
-├── ui/           # Radix primitives (button, dialog, input, etc.)
+├── ui/           # Radix primitives (button, dialog, input, toast, etc.)
 ├── layout/       # Sidebar, Toolbar
-└── items/        # ItemGrid, ItemCard, DropZone
+├── items/        # ItemGrid, ItemCard, DropZone
+├── dialogs/      # TagPickerDialog, BookmarkImportDialog
+├── detail/       # ItemDetailPanel
+└── settings/     # SettingsPanel
 ```
 
 ### Tauri Commands
@@ -112,11 +128,63 @@ When adding a new command:
 2. Register in `lib.rs` invoke_handler
 3. Add typed wrapper in `src/lib/tauri.ts`
 
-## Current Status
+## Patterns & Conventions
 
-Backend (Rust): Complete - library management, items/folders/tags CRUD, image import with thumbnails, bookmark import.
+### Selection Handling
 
-Frontend (React): Basic shell complete - sidebar, grid view, import dialogs. Still needs: item detail panel, search interface, settings, keyboard shortcuts.
+Item selection uses a modifiers object pattern for clean multi-select and range-select:
+```typescript
+const handleSelectItem = (itemId: string, modifiers: { meta: boolean; shift: boolean }) => {
+  if (modifiers.shift && lastSelectedIndex !== null) {
+    // Range select
+  } else if (modifiers.meta) {
+    // Toggle select
+  } else {
+    // Single select
+  }
+};
+```
+
+### Toast Notifications
+
+Import feedback uses `ImportToast` component (`src/components/ui/import-toast.tsx`) with states: `importing`, `success`, `error`, `warning`. Toast state is managed in App.tsx:
+
+```typescript
+const [importToast, setImportToast] = useState<{
+  status: "importing" | "success" | "error" | "warning";
+  message: string;
+  count?: number;
+} | null>(null);
+```
+
+### Dialog Components
+
+Dialogs follow a consistent pattern using Radix primitives:
+```typescript
+// In App.tsx - state
+const [dialogOpen, setDialogOpen] = useState(false);
+
+// Component usage
+<SomeDialog
+  isOpen={dialogOpen}
+  onClose={() => setDialogOpen(false)}
+  onComplete={handleComplete}
+/>
+```
+
+### Drag & Drop to Folders
+
+Folder drop targets track hover state for visual feedback:
+```typescript
+const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
+// onDragOver sets target, onDrop moves items, onDragLeave clears
+```
+
+### localStorage Persistence
+
+UI preferences persist to localStorage with keys prefixed `inspo:`:
+- `inspo:sidebar-width` - Sidebar width (180-400px)
+- `inspo:recent-libraries` - Recent library paths
 
 ## Recursive Development System
 

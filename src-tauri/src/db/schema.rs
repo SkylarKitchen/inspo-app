@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS items (
     width INTEGER,
     height INTEGER,
     file_size INTEGER,
-    thumbnail_path TEXT
+    thumbnail_path TEXT,
+    deleted_at INTEGER DEFAULT NULL
 );
 
 -- Tags
