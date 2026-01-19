@@ -127,17 +127,6 @@ export function ItemCard({
     }
   };
 
-  console.log('ItemCard debug:', {
-    id: item.id,
-    title: item.title,
-    libraryPath,
-    thumbnailPath: item.thumbnailPath,
-    filePath: item.filePath,
-    thumbnailUrl: thumbnailUrl,
-    fileUrl: fileUrl,
-    displayUrl
-  });
-
   const handleCopyUrl = async () => {
     if (item.url) {
       await navigator.clipboard.writeText(item.url);

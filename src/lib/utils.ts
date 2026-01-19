@@ -42,12 +42,9 @@ export function getDomainFromUrl(url: string): string {
  */
 export function convertToLocalSrc(filePath: string): string {
   try {
-    const url = convertFileSrc(filePath);
-    console.log('convertFileSrc result:', { filePath, url });
-    return url;
-  } catch (e) {
-    // Fallback for non-Tauri context or errors
-    console.warn('convertFileSrc failed, using fallback:', e);
+    return convertFileSrc(filePath);
+  } catch {
+    // Fallback for non-Tauri context
     const path = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
     return `http://asset.localhost${path}`;
   }
