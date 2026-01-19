@@ -81,5 +81,6 @@ CREATE INDEX IF NOT EXISTS idx_items_folder ON items(folder_id);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items(type);
 CREATE INDEX IF NOT EXISTS idx_items_created ON items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_favorited ON items(is_favorited);
+CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
 "#;

@@ -80,9 +80,18 @@ pub fn get_items(
         sql.push_str(&conditions.join(" AND "));
     }
 
-    // Sorting
-    let sort_by = filter.sort_by.unwrap_or_else(|| "created_at".to_string());
-    let sort_order = filter.sort_order.unwrap_or_else(|| "DESC".to_string());
+    // Sorting - whitelist allowed values to prevent SQL injection
+    let allowed_sort_columns = ["created_at", "updated_at", "title"];
+    let sort_by = filter
+        .sort_by
+        .as_deref()
+        .filter(|s| allowed_sort_columns.contains(s))
+        .unwrap_or("created_at");
+
+    let sort_order = match filter.sort_order.as_deref() {
+        Some("ASC") => "ASC",
+        _ => "DESC",
+    };
     sql.push_str(&format!(" ORDER BY i.{} {}", sort_by, sort_order));
 
     // Pagination
