@@ -112,13 +112,14 @@ pub fn get_library_stats(state: State<'_, AppState>) -> Result<super::LibrarySta
     let db = db_lock.as_ref().ok_or("No library open")?;
     let conn = db.conn.lock().unwrap();
 
+    // All counts should exclude trashed items (deleted_at IS NULL)
     let total_items: i32 = conn
-        .query_row("SELECT COUNT(*) FROM items", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM items WHERE deleted_at IS NULL", [], |row| row.get(0))
         .unwrap_or(0);
 
     let total_images: i32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM items WHERE type = 'image'",
+            "SELECT COUNT(*) FROM items WHERE type = 'image' AND deleted_at IS NULL",
             [],
             |row| row.get(0),
         )
@@ -126,7 +127,7 @@ pub fn get_library_stats(state: State<'_, AppState>) -> Result<super::LibrarySta
 
     let total_bookmarks: i32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM items WHERE type = 'bookmark'",
+            "SELECT COUNT(*) FROM items WHERE type = 'bookmark' AND deleted_at IS NULL",
             [],
             |row| row.get(0),
         )
@@ -142,7 +143,7 @@ pub fn get_library_stats(state: State<'_, AppState>) -> Result<super::LibrarySta
 
     let favorites_count: i32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM items WHERE is_favorited = 1",
+            "SELECT COUNT(*) FROM items WHERE is_favorited = 1 AND deleted_at IS NULL",
             [],
             |row| row.get(0),
         )
