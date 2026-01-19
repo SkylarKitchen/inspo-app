@@ -162,19 +162,28 @@ function FolderItem({
             style={{ paddingLeft: `${level * 12 + 8}px` }}
           >
             {hasChildren ? (
-              <button
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsExpanded(!isExpanded);
                 }}
-                className="p-0.5 hover:bg-surface-active rounded transition-colors"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsExpanded(!isExpanded);
+                  }
+                }}
+                className="p-0.5 hover:bg-surface-active rounded transition-colors cursor-pointer"
               >
                 {isExpanded ? (
                   <ChevronDown className="w-3 h-3 text-text-subtle" />
                 ) : (
                   <ChevronRight className="w-3 h-3 text-text-subtle" />
                 )}
-              </button>
+              </span>
             ) : (
               <span className="w-4" />
             )}
@@ -351,9 +360,17 @@ export function Sidebar({
 
           {/* Folders Section */}
           <div>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setFoldersExpanded(!foldersExpanded)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setFoldersExpanded(!foldersExpanded);
+                }
+              }}
+              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors cursor-pointer"
             >
               <span className="flex items-center flex-1 section-header">Folders</span>
               <div className="flex items-center gap-1">
@@ -368,13 +385,18 @@ export function Sidebar({
                 >
                   <FolderPlus className="w-3 h-3" />
                 </Button>
-                {foldersExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                <span
+                  className="flex items-center"
+                  aria-hidden="true"
+                >
+                  {foldersExpanded ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3" />
+                  )}
+                </span>
               </div>
-            </button>
+            </div>
             {foldersExpanded && (
               <div className="space-y-0.5">
                 {folders.map((folder) => (
@@ -401,9 +423,17 @@ export function Sidebar({
 
           {/* Tags Section */}
           <div>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setTagsExpanded(!tagsExpanded)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setTagsExpanded(!tagsExpanded);
+                }
+              }}
+              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors cursor-pointer"
             >
               <span className="flex items-center flex-1 section-header">Tags</span>
               <div className="flex items-center gap-1">
@@ -418,13 +448,18 @@ export function Sidebar({
                 >
                   <Tag className="w-3 h-3" />
                 </Button>
-                {tagsExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                <span
+                  className="flex items-center"
+                  aria-hidden="true"
+                >
+                  {tagsExpanded ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3" />
+                  )}
+                </span>
               </div>
-            </button>
+            </div>
             {tagsExpanded && (
               <div className="space-y-0.5 mt-1">
                 {tags.map((tag) => (
