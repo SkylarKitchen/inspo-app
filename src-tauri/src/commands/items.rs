@@ -1,5 +1,6 @@
 use crate::AppState;
 use rusqlite::{params, OptionalExtension};
+use std::collections::HashMap;
 use tauri::State;
 
 use super::{Item, ItemFilter, Tag};
@@ -128,11 +129,18 @@ pub fn get_items(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Load tags for each item
-    let mut items_with_tags = items;
-    for item in &mut items_with_tags {
-        item.tags = get_item_tags_internal(&conn, &item.id)?;
-    }
+    // Batch load tags for all items (avoids N+1 queries)
+    let item_ids: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
+    let mut tags_by_item = load_tags_for_items(&conn, &item_ids)?;
+
+    // Assign tags to each item
+    let items_with_tags: Vec<Item> = items
+        .into_iter()
+        .map(|mut item| {
+            item.tags = tags_by_item.remove(&item.id).unwrap_or_default();
+            item
+        })
+        .collect();
 
     Ok(items_with_tags)
 }
@@ -212,6 +220,56 @@ fn get_item_tags_internal(
         .map_err(|e| e.to_string())?;
 
     Ok(tags)
+}
+
+/// Batch load tags for multiple items in a single query.
+/// Returns a HashMap of item_id -> Vec<Tag>.
+/// This avoids the N+1 query problem when loading tags for many items.
+fn load_tags_for_items(
+    conn: &rusqlite::Connection,
+    item_ids: &[String],
+) -> Result<HashMap<String, Vec<Tag>>, String> {
+    if item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // Build query with placeholders
+    let placeholders: Vec<&str> = item_ids.iter().map(|_| "?").collect();
+    let sql = format!(
+        "SELECT it.item_id, t.id, t.name, t.color
+         FROM item_tags it
+         INNER JOIN tags t ON t.id = it.tag_id
+         WHERE it.item_id IN ({})",
+        placeholders.join(",")
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    // Create params from item_ids
+    let params: Vec<&dyn rusqlite::ToSql> = item_ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+
+    let rows = stmt
+        .query_map(params.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?, // item_id
+                Tag {
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                    color: row.get(3)?,
+                    item_count: 0,
+                },
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    // Build the HashMap
+    let mut tags_by_item: HashMap<String, Vec<Tag>> = HashMap::new();
+    for row_result in rows {
+        let (item_id, tag) = row_result.map_err(|e| e.to_string())?;
+        tags_by_item.entry(item_id).or_default().push(tag);
+    }
+
+    Ok(tags_by_item)
 }
 
 /// Update an item
@@ -424,11 +482,18 @@ pub fn get_trashed_items(state: State<'_, AppState>) -> Result<Vec<Item>, String
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Load tags for each item
-    let mut items_with_tags = items;
-    for item in &mut items_with_tags {
-        item.tags = get_item_tags_internal(&conn, &item.id)?;
-    }
+    // Batch load tags for all items (avoids N+1 queries)
+    let item_ids: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
+    let mut tags_by_item = load_tags_for_items(&conn, &item_ids)?;
+
+    // Assign tags to each item
+    let items_with_tags: Vec<Item> = items
+        .into_iter()
+        .map(|mut item| {
+            item.tags = tags_by_item.remove(&item.id).unwrap_or_default();
+            item
+        })
+        .collect();
 
     Ok(items_with_tags)
 }
