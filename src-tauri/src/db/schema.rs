@@ -76,11 +76,27 @@ CREATE TRIGGER IF NOT EXISTS items_au AFTER UPDATE ON items BEGIN
     VALUES (NEW.rowid, NEW.title, NEW.description);
 END;
 
--- Indexes
+-- Indexes (single column)
 CREATE INDEX IF NOT EXISTS idx_items_folder ON items(folder_id);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items(type);
 CREATE INDEX IF NOT EXISTS idx_items_created ON items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_favorited ON items(is_favorited);
 CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
+
+-- Composite indexes for common query patterns
+-- Folder view: WHERE folder_id = ? AND deleted_at IS NULL ORDER BY created_at DESC
+CREATE INDEX IF NOT EXISTS idx_items_folder_created
+    ON items(folder_id, deleted_at, created_at DESC);
+
+-- Type filter: WHERE type = ? AND deleted_at IS NULL ORDER BY created_at DESC
+CREATE INDEX IF NOT EXISTS idx_items_type_created
+    ON items(type, deleted_at, created_at DESC);
+
+-- Favorites: WHERE is_favorited = 1 AND deleted_at IS NULL ORDER BY created_at DESC
+CREATE INDEX IF NOT EXISTS idx_items_fav_created
+    ON items(is_favorited, deleted_at, created_at DESC);
+
+-- Efficient tag queries: covers tag_id lookups with item_id
+CREATE INDEX IF NOT EXISTS idx_item_tags_tag ON item_tags(tag_id, item_id);
 "#;

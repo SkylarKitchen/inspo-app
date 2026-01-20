@@ -1,12 +1,126 @@
-use crate::commands::thumbnails::generate_thumbnail;
+use crate::commands::thumbnails::generate_thumbnail_from_image;
 use crate::AppState;
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView};
 use rusqlite::params;
 use std::fs;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use tauri::State;
+use url::Url;
 
 use super::Item;
+
+// ============================================================================
+// SSRF Protection - URL Validation
+// ============================================================================
+
+/// Validate a bookmark URL to prevent SSRF attacks
+fn validate_bookmark_url(url_str: &str) -> Result<Url, String> {
+    let url = Url::parse(url_str).map_err(|e| format!("Invalid URL: {}", e))?;
+
+    // Only allow http/https schemes
+    match url.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(format!("Forbidden scheme: {}. Only http and https are allowed.", scheme)),
+    }
+
+    // Block URLs with embedded credentials
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("URLs with embedded credentials are not allowed".to_string());
+    }
+
+    // Validate host exists
+    let host = url.host_str().ok_or("URL must have a host")?;
+
+    // Block localhost and common internal hostnames
+    let blocked_hosts = [
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "[::1]",
+        "metadata.google.internal",
+        "169.254.169.254",
+        "metadata.internal",
+    ];
+
+    let host_lower = host.to_lowercase();
+    if blocked_hosts.iter().any(|&h| host_lower == h) {
+        return Err("Internal hosts are not allowed".to_string());
+    }
+
+    // Block .local and .internal TLDs
+    if host_lower.ends_with(".local") || host_lower.ends_with(".internal") {
+        return Err("Internal domain names are not allowed".to_string());
+    }
+
+    // Check for private IP ranges if host parses as IP
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_private_ip(&ip) {
+            return Err("Private IP addresses are not allowed".to_string());
+        }
+    }
+
+    Ok(url)
+}
+
+/// Check if an IP address is private/internal
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            ipv4.is_private()           // 10.x, 172.16-31.x, 192.168.x
+            || ipv4.is_loopback()       // 127.x.x.x
+            || ipv4.is_link_local()     // 169.254.x.x (except metadata)
+            || ipv4.is_broadcast()      // 255.255.255.255
+            || ipv4.is_unspecified()    // 0.0.0.0
+            || is_shared_address(ipv4)  // 100.64.0.0/10 (CGNAT)
+            || is_cloud_metadata(ipv4)  // 169.254.169.254
+            || is_documentation_ip(ipv4) // 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24
+        }
+        IpAddr::V6(ipv6) => {
+            ipv6.is_loopback()          // ::1
+            || ipv6.is_unspecified()    // ::
+            || is_ipv6_private(ipv6)
+        }
+    }
+}
+
+/// Check for CGNAT shared address space (100.64.0.0/10)
+fn is_shared_address(ip: &Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 100 && (octets[1] & 0xC0) == 64
+}
+
+/// Check for cloud metadata endpoint (169.254.169.254)
+fn is_cloud_metadata(ip: &Ipv4Addr) -> bool {
+    *ip == Ipv4Addr::new(169, 254, 169, 254)
+}
+
+/// Check for documentation/example IP ranges
+fn is_documentation_ip(ip: &Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    // TEST-NET-1: 192.0.2.0/24
+    (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+    // TEST-NET-2: 198.51.100.0/24
+    || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+    // TEST-NET-3: 203.0.113.0/24
+    || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+}
+
+/// Check for private IPv6 addresses
+fn is_ipv6_private(ip: &Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    // Unique Local Address (fc00::/7)
+    (segments[0] & 0xfe00) == 0xfc00
+    // Link-local (fe80::/10)
+    || (segments[0] & 0xffc0) == 0xfe80
+    // Site-local (deprecated but still check, fec0::/10)
+    || (segments[0] & 0xffc0) == 0xfec0
+}
+
+// ============================================================================
+// Import Functions
+// ============================================================================
 
 /// Import an image file into the library
 #[tauri::command]
@@ -90,28 +204,29 @@ pub async fn import_image(
         fs::rename(&source, &dest_path).map_err(|e| e.to_string())?;
     }
 
-    // Get image dimensions
-    let (width, height) = match image::open(&dest_path) {
+    // Open image ONCE for dimensions, thumbnail, and color extraction
+    // This eliminates triple decode (was: open for dims, open for thumb, open for color)
+    let id = uuid::Uuid::new_v4().to_string();
+    let (width, height, thumbnail_path, color_hex) = match image::open(&dest_path) {
         Ok(img) => {
             let dims = img.dimensions();
-            (Some(dims.0 as i32), Some(dims.1 as i32))
-        }
-        Err(_) => (None, None),
-    };
 
-    // Generate thumbnail
-    let id = uuid::Uuid::new_v4().to_string();
-    let thumbnail_result = generate_thumbnail(&library_path, &dest_path, &id);
-    let thumbnail_path = thumbnail_result.ok();
+            // Generate thumbnail from already-loaded image
+            let thumb = generate_thumbnail_from_image(&library_path, &img, &id).ok();
+
+            // Extract color from already-loaded image
+            let color = extract_dominant_color_from_image(&img);
+
+            (Some(dims.0 as i32), Some(dims.1 as i32), thumb, color)
+        }
+        Err(_) => (None, None, None, None),
+    };
 
     // Calculate relative path
     let relative_path = dest_path
         .strip_prefix(&library_path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| dest_name.clone());
-
-    // Extract dominant color (simplified)
-    let color_hex = extract_dominant_color(&dest_path);
 
     let now = chrono::Utc::now().timestamp();
 
@@ -195,8 +310,8 @@ pub async fn import_bookmark(
         .clone()
         .ok_or("No library open")?;
 
-    // Validate URL
-    let parsed_url = url::Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+    // Validate URL with SSRF protection
+    let parsed_url = validate_bookmark_url(&url)?;
 
     // Fetch metadata if title not provided
     let (final_title, final_description) = if title.is_none() || description.is_none() {
@@ -280,8 +395,8 @@ pub struct BookmarkMetadata {
 /// Fetch metadata from a URL without importing
 #[tauri::command]
 pub async fn fetch_bookmark_metadata(url: String) -> Result<BookmarkMetadata, String> {
-    // Validate URL
-    let parsed_url = url::Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+    // Validate URL with SSRF protection
+    let parsed_url = validate_bookmark_url(&url)?;
 
     let (title, description) = fetch_url_metadata(&url).await.unwrap_or((None, None));
 
@@ -346,17 +461,18 @@ async fn fetch_url_metadata(url: &str) -> Result<(Option<String>, Option<String>
     Ok((title, description))
 }
 
-/// Extract dominant color from an image (simplified implementation)
-fn extract_dominant_color(path: &PathBuf) -> Option<String> {
-    let img = image::open(path).ok()?;
-    let img = img.resize(10, 10, image::imageops::FilterType::Nearest);
+/// Extract dominant color from an already-loaded image
+/// This avoids re-decoding the image when it's already in memory
+fn extract_dominant_color_from_image(img: &DynamicImage) -> Option<String> {
+    // Resize to tiny image for fast color averaging
+    let small = img.resize(10, 10, image::imageops::FilterType::Nearest);
 
     let mut r_sum: u64 = 0;
     let mut g_sum: u64 = 0;
     let mut b_sum: u64 = 0;
     let mut count: u64 = 0;
 
-    for pixel in img.to_rgb8().pixels() {
+    for pixel in small.to_rgb8().pixels() {
         r_sum += pixel[0] as u64;
         g_sum += pixel[1] as u64;
         b_sum += pixel[2] as u64;

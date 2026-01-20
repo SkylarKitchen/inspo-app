@@ -1,18 +1,27 @@
 use image::imageops::FilterType;
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const THUMBNAIL_SIZE: u32 = 256;
 
-/// Generate a thumbnail for an image
+/// Generate a thumbnail for an image (opens file from disk)
 pub fn generate_thumbnail(
     library_path: &Path,
     image_path: &Path,
     item_id: &str,
 ) -> Result<String, String> {
     let img = image::open(image_path).map_err(|e| format!("Failed to open image: {}", e))?;
+    generate_thumbnail_from_image(library_path, &img, item_id)
+}
 
+/// Generate a thumbnail from an already-loaded DynamicImage
+/// This avoids re-decoding the image when it's already in memory
+pub fn generate_thumbnail_from_image(
+    library_path: &Path,
+    img: &DynamicImage,
+    item_id: &str,
+) -> Result<String, String> {
     let (width, height) = img.dimensions();
 
     // Calculate thumbnail dimensions maintaining aspect ratio
@@ -24,8 +33,8 @@ pub fn generate_thumbnail(
         ((THUMBNAIL_SIZE as f32 * ratio) as u32, THUMBNAIL_SIZE)
     };
 
-    // Resize the image
-    let thumbnail = img.resize(thumb_width, thumb_height, FilterType::Lanczos3);
+    // Resize the image using Triangle filter (2-3x faster than Lanczos3, good enough for thumbnails)
+    let thumbnail = img.resize(thumb_width, thumb_height, FilterType::Triangle);
 
     // Ensure thumbnails directory exists
     let thumbnails_dir = library_path.join(".inspo").join("thumbnails");
@@ -35,9 +44,6 @@ pub fn generate_thumbnail(
     let thumbnail_filename = format!("{}.webp", item_id);
     let thumbnail_path = thumbnails_dir.join(&thumbnail_filename);
 
-    // Use image crate to save as WebP (if feature enabled) or PNG as fallback
-    // Since we are seeing panic with webp crate, let's use standard image crate saving
-    // The previous implementation was manually using webp crate which panicked on buffer size
     thumbnail.save(&thumbnail_path).map_err(|e| e.to_string())?;
 
     // Return relative path
