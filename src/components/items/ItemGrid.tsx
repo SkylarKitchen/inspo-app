@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { cn } from "@/lib/utils";
 import { ItemCard } from "./ItemCard";
 import { Inbox, FolderOpen, Heart, Image, Bookmark, Tag, Trash2, Search } from "lucide-react";
 import type { Item, Folder, ViewMode } from "@/types";
@@ -102,17 +101,6 @@ export function ItemGrid({
   const parentRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Calculate columns based on container width
-  const columns = viewMode === "list"
-    ? 1
-    : Math.max(1, Math.floor((containerWidth - PADDING * 2 + GAP) / (ITEM_MIN_WIDTH + GAP)));
-
-  // Calculate row count
-  const rowCount = Math.ceil(items.length / columns);
-
-  // Item height based on view mode
-  const itemHeight = viewMode === "list" ? ITEM_HEIGHT_LIST : ITEM_HEIGHT_GRID;
-
   // Track container width with ResizeObserver
   useEffect(() => {
     const parent = parentRef.current;
@@ -131,12 +119,25 @@ export function ItemGrid({
     return () => observer.disconnect();
   }, []);
 
-  // Row virtualizer
+  // Calculate columns based on container width (need width > 0 for proper calculation)
+  const columns = viewMode === "list"
+    ? 1
+    : containerWidth > 0
+      ? Math.max(1, Math.floor((containerWidth - PADDING * 2 + GAP) / (ITEM_MIN_WIDTH + GAP)))
+      : 4; // Default to 4 columns while measuring
+
+  // Calculate row count
+  const rowCount = Math.ceil(items.length / columns);
+
+  // Item height based on view mode
+  const itemHeight = viewMode === "list" ? ITEM_HEIGHT_LIST : ITEM_HEIGHT_GRID;
+
+  // Row virtualizer - must be called unconditionally (hooks rules)
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
     estimateSize: useCallback(() => itemHeight + GAP, [itemHeight]),
-    overscan: 3, // Render 3 extra rows above/below viewport
+    overscan: 5, // Render 5 extra rows above/below viewport for smoother scrolling
   });
 
   if (isLoading) {
@@ -201,10 +202,6 @@ export function ItemGrid({
     );
   }
 
-  // Calculate item width for grid view (distribute space evenly)
-  const availableWidth = containerWidth - PADDING * 2 - (columns - 1) * GAP;
-  const itemWidth = columns > 0 ? Math.floor(availableWidth / columns) : ITEM_MIN_WIDTH;
-
   return (
     <div
       ref={parentRef}
@@ -236,18 +233,17 @@ export function ItemGrid({
               }}
             >
               <div
-                className={cn(
-                  viewMode === "list"
-                    ? "flex flex-col gap-1 px-4"
-                    : "flex gap-3 px-4"
-                )}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: viewMode === "list"
+                    ? "1fr"
+                    : `repeat(${columns}, minmax(${ITEM_MIN_WIDTH}px, 1fr))`,
+                  gap: viewMode === "list" ? "4px" : `${GAP}px`,
+                  padding: `0 ${PADDING}px`,
+                }}
               >
                 {rowItems.map((item) => (
-                  <div
-                    key={item.id}
-                    style={viewMode === "grid" ? { width: itemWidth } : undefined}
-                    className={cn(viewMode === "list" && "w-full")}
-                  >
+                  <div key={item.id}>
                     <ItemCard
                       item={item}
                       isSelected={selectedIds.has(item.id)}
