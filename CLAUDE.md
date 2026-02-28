@@ -1,3 +1,26 @@
+---
+title: Inspo App
+description: macOS desktop app for design inspiration — Tauri 2.0 + React 19, SQLite, WebP thumbnails, agent dev loop
+version: 1.0
+last_updated: 2026-02-28
+scope: project
+status: active
+framework: Tauri 2.0 + Vite + React 19
+toc:
+  - Overview
+  - Commands
+  - Architecture
+  - Tech Stack
+  - Visual Design
+  - Conventions
+  - Patterns & Conventions
+  - Recursive Development System
+depends_on:
+  - ../../CLAUDE.md
+cross_references:
+  - ../website/CLAUDE.md  # Both active apps in the monorepo
+---
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
