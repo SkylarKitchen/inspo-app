@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Heart, Link, ExternalLink, Trash2, FolderInput, Tag } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Heart, Link, ExternalLink, Trash2, FolderInput, Tag, Copy, Clipboard } from "lucide-react";
 import { cn, getDomainFromUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,35 +12,100 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { convertToLocalSrc } from "@/lib/utils";
 import type { Item, Folder } from "@/types";
 
 interface ItemCardProps {
   item: Item;
   isSelected: boolean;
+  selectedCount: number;
+  searchQuery?: string;
   onSelect: (itemId: string, modifiers: { meta: boolean; shift: boolean }) => void;
   onOpen: (item: Item) => void;
   onToggleFavorite: (itemId: string) => void;
   onDelete: (itemId: string) => void;
+  onDeleteSelected?: () => void;
   onMoveToFolder: (itemId: string, folderId: string | null) => void;
+  onMoveSelectedToFolder?: (folderId: string | null) => void;
   onAddTag: (itemId: string) => void;
   folders: Folder[];
   libraryPath: string | null;
 }
 
+// Highlight matching text in search results
+function HighlightedText({ text, query }: { text: string; query?: string }) {
+  if (!query || !text) {
+    return <>{text}</>;
+  }
+
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="bg-primary/30 text-text rounded-sm px-0.5">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 export function ItemCard({
   item,
   isSelected,
+  selectedCount,
+  searchQuery,
   onSelect,
   onOpen,
   onToggleFavorite,
   onDelete,
+  onDeleteSelected,
   onMoveToFolder,
+  onMoveSelectedToFolder,
   onAddTag,
   folders,
   libraryPath,
 }: ItemCardProps) {
+  // When item is selected and there are multiple selections, actions should apply to all
+  const isMultiSelection = isSelected && selectedCount > 1;
+  /* eslint-disable react-hooks/set-state-in-effect */
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+
+  const getThumbnailUrl = () => {
+    if (!libraryPath || !item.thumbnailPath) return null;
+    return convertToLocalSrc(`${libraryPath}/${item.thumbnailPath}`);
+  };
+
+  const getFileUrl = () => {
+    if (!libraryPath || !item.filePath) return null;
+    return convertToLocalSrc(`${libraryPath}/${item.filePath}`);
+  };
+
+  const thumbnailUrl = getThumbnailUrl();
+  const fileUrl = getFileUrl();
+
+  useEffect(() => {
+    setDisplayUrl(thumbnailUrl || fileUrl);
+    setImageError(false);
+    setImageLoaded(false);
+  }, [thumbnailUrl, fileUrl]);
+
+  const handleImageError = () => {
+    if (thumbnailUrl && displayUrl === thumbnailUrl && fileUrl) {
+      console.log("Thumbnail failed, falling back to full file", item.id);
+      setDisplayUrl(fileUrl);
+    } else {
+      console.error("Image load failed", item.id, displayUrl);
+      setImageError(true);
+    }
+  };
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleClick = (e: React.MouseEvent) => {
     onSelect(item.id, {
@@ -53,18 +118,24 @@ export function ItemCard({
     onOpen(item);
   };
 
-  const getThumbnailUrl = () => {
-    if (!libraryPath || !item.thumbnailPath) return null;
-    // Convert to Tauri asset protocol URL
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.thumbnailPath)}`;
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("text/plain", item.id);
+    e.dataTransfer.effectAllowed = "move";
+    // Select this item if not already selected (for single item drag)
+    if (!isSelected) {
+      onSelect(item.id, { meta: false, shift: false });
+    }
   };
 
-  const getFileUrl = () => {
-    if (!libraryPath || !item.filePath) return null;
-    return `asset://localhost/${encodeURIComponent(libraryPath + "/" + item.filePath)}`;
+  const handleCopyUrl = async () => {
+    if (item.url) {
+      await navigator.clipboard.writeText(item.url);
+    }
   };
 
-  const imageUrl = getThumbnailUrl() || getFileUrl();
+  const handleCopyTitle = async () => {
+    await navigator.clipboard.writeText(item.title || "Untitled");
+  };
 
   return (
     <ContextMenu>
@@ -72,6 +143,8 @@ export function ItemCard({
         <div
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
+          onDragStart={handleDragStart}
+          draggable
           className={cn(
             "group relative bg-surface rounded-xl overflow-hidden cursor-pointer card-hover",
             "shadow-card",
@@ -85,13 +158,13 @@ export function ItemCard({
               backgroundColor: item.colorHex || undefined,
             }}
           >
-            {item.type === "image" && imageUrl && !imageError ? (
+            {item.type === "image" && displayUrl && !imageError ? (
               <>
                 {!imageLoaded && (
                   <div className="absolute inset-0 animate-pulse bg-surface-hover" />
                 )}
                 <img
-                  src={imageUrl}
+                  src={displayUrl}
                   alt={item.title || "Image"}
                   className={cn(
                     "w-full h-full object-cover transition-all duration-300",
@@ -99,7 +172,7 @@ export function ItemCard({
                     "group-hover:scale-[1.02]"
                   )}
                   onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onError={handleImageError}
                   draggable={false}
                 />
               </>
@@ -165,7 +238,7 @@ export function ItemCard({
           {/* Title Area */}
           <div className="p-3">
             <p className="text-sm text-text truncate font-medium">
-              {item.title || "Untitled"}
+              <HighlightedText text={item.title || "Untitled"} query={searchQuery} />
             </p>
             {item.tags && item.tags.length > 0 && (
               <div className="flex gap-1 mt-2 flex-wrap">
@@ -205,17 +278,17 @@ export function ItemCard({
         <ContextMenuSub>
           <ContextMenuSubTrigger>
             <FolderInput className="w-4 h-4 mr-2" />
-            Move to Folder
+            {isMultiSelection ? `Move ${selectedCount} Items` : "Move to Folder"}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem onClick={() => onMoveToFolder(item.id, null)}>
+            <ContextMenuItem onClick={() => isMultiSelection && onMoveSelectedToFolder ? onMoveSelectedToFolder(null) : onMoveToFolder(item.id, null)}>
               No Folder
             </ContextMenuItem>
             <ContextMenuSeparator />
             {folders.map((folder) => (
               <ContextMenuItem
                 key={folder.id}
-                onClick={() => onMoveToFolder(item.id, folder.id)}
+                onClick={() => isMultiSelection && onMoveSelectedToFolder ? onMoveSelectedToFolder(folder.id) : onMoveToFolder(item.id, folder.id)}
               >
                 {folder.name}
               </ContextMenuItem>
@@ -226,13 +299,31 @@ export function ItemCard({
           <Tag className="w-4 h-4 mr-2" />
           Add Tags
         </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Copy className="w-4 h-4 mr-2" />
+            Copy
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={handleCopyTitle}>
+              <Clipboard className="w-4 h-4 mr-2" />
+              Copy Title
+            </ContextMenuItem>
+            {item.url && (
+              <ContextMenuItem onClick={handleCopyUrl}>
+                <Link className="w-4 h-4 mr-2" />
+                Copy URL
+              </ContextMenuItem>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
         <ContextMenuSeparator />
         <ContextMenuItem
-          onClick={() => onDelete(item.id)}
+          onClick={() => isMultiSelection && onDeleteSelected ? onDeleteSelected() : onDelete(item.id)}
           className="text-danger focus:text-danger"
         >
           <Trash2 className="w-4 h-4 mr-2" />
-          Delete
+          {isMultiSelection ? `Delete ${selectedCount} Items` : "Move to Trash"}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

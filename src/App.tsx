@@ -12,13 +12,16 @@ const openShell = async (path: string) => {
   const { open } = await import("@tauri-apps/plugin-shell");
   return open(path);
 };
-import { Sidebar, getSavedSidebarWidth } from "@/components/layout/Sidebar";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { getSavedSidebarWidth } from "@/lib/sidebar-utils";
 import { Toolbar } from "@/components/layout/Toolbar";
 import { ItemGrid } from "@/components/items/ItemGrid";
 import { DropZone } from "@/components/items/DropZone";
 import { SetupWizard } from "@/components/SetupWizard";
 import { ItemDetailPanel } from "@/components/detail/ItemDetailPanel";
 import { TagPickerDialog } from "@/components/dialogs/TagPickerDialog";
+import { TagDialog } from "@/components/dialogs/TagDialog";
+import { BookmarkImportDialog } from "@/components/dialogs/BookmarkImportDialog";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { ImportToast, type ImportToastState } from "@/components/ui/import-toast";
 import {
@@ -33,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import * as tauri from "@/lib/tauri";
 import type { Item, Folder, Tag, ViewMode, LibraryStats } from "@/types";
 
-type CurrentView = "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag";
+type CurrentView = "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag" | "trash";
 
 function App() {
   // Library state
@@ -53,6 +56,7 @@ function App() {
     totalTags: 0,
     favoritesCount: 0,
   });
+  const [trashCount, setTrashCount] = useState(0);
 
   // UI state
   const [currentView, setCurrentView] = useState<CurrentView>("all");
@@ -62,8 +66,11 @@ function App() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
+  const [filterType, setFilterType] = useState<"all" | "image" | "bookmark">("all");
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
 
@@ -79,9 +86,8 @@ function App() {
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderParentId, setNewFolderParentId] = useState<string | undefined>();
   const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
-  const [bookmarkUrl, setBookmarkUrl] = useState("");
-  const [newTagDialogOpen, setNewTagDialogOpen] = useState(false);
-  const [newTagName, setNewTagName] = useState("");
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [tagPickerItemId, setTagPickerItemId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [importToast, setImportToast] = useState<ImportToastState | null>(null);
@@ -91,6 +97,85 @@ function App() {
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
   }, []);
+
+  // Grid navigation helpers
+  const GRID_COLUMNS = 4; // Approximate columns in grid view
+
+  const navigateGrid = useCallback((direction: "up" | "down" | "left" | "right") => {
+    if (items.length === 0) return;
+
+    // Get the last selected item index, or start from first/last
+    let currentIndex = -1;
+    if (selectedIds.size > 0) {
+      const lastSelected = Array.from(selectedIds).pop();
+      currentIndex = items.findIndex((item) => item.id === lastSelected);
+    }
+
+    let nextIndex: number;
+    switch (direction) {
+      case "up":
+        nextIndex = currentIndex <= 0 ? items.length - 1 : Math.max(0, currentIndex - GRID_COLUMNS);
+        break;
+      case "down":
+        nextIndex = currentIndex < 0 ? 0 : Math.min(items.length - 1, currentIndex + GRID_COLUMNS);
+        break;
+      case "left":
+        nextIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+        break;
+      case "right":
+        nextIndex = currentIndex < 0 || currentIndex >= items.length - 1 ? 0 : currentIndex + 1;
+        break;
+    }
+
+    const nextItem = items[nextIndex];
+    if (nextItem) {
+      setSelectedIds(new Set([nextItem.id]));
+      setLastSelectedIndex(nextIndex);
+    }
+  }, [items, selectedIds]);
+
+  const selectAll = useCallback(() => {
+    if (items.length > 0) {
+      setSelectedIds(new Set(items.map((item) => item.id)));
+    }
+  }, [items]);
+
+  const deleteSelected = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      // Use soft delete (move to trash) for normal views, permanent delete for trash view
+      if (currentView === "trash") {
+        await tauri.permanentDeleteItems(ids);
+      } else {
+        await tauri.softDeleteItems(ids);
+      }
+      setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+      if (detailItem && selectedIds.has(detailItem.id)) {
+        setIsDetailOpen(false);
+        setDetailItem(null);
+      }
+      setSelectedIds(new Set());
+      const [statsData, trashCountData] = await Promise.all([
+        tauri.getLibraryStats(),
+        tauri.getTrashCount(),
+      ]);
+      setStats(statsData);
+      setTrashCount(trashCountData);
+    } catch (err) {
+      console.error("Failed to delete items:", err);
+    }
+  }, [selectedIds, detailItem, currentView]);
+
+  const openSelectedItem = useCallback(() => {
+    if (selectedIds.size === 1) {
+      const itemId = Array.from(selectedIds)[0];
+      const item = items.find((i) => i.id === itemId);
+      if (item) {
+        handleOpenItem(item);
+      }
+    }
+  }, [selectedIds, items]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -124,6 +209,18 @@ function App() {
       { key: "4", meta: true, handler: () => handleSelectView("bookmarks"), preventDefault: true },
       // ⌘, - Open settings
       { key: ",", meta: true, handler: () => setIsSettingsOpen(true), preventDefault: true },
+      // ⌘A - Select all
+      { key: "a", meta: true, handler: selectAll, preventDefault: true },
+      // Arrow keys - Navigate grid
+      { key: "ArrowUp", handler: () => navigateGrid("up"), preventDefault: true },
+      { key: "ArrowDown", handler: () => navigateGrid("down"), preventDefault: true },
+      { key: "ArrowLeft", handler: () => navigateGrid("left"), preventDefault: true },
+      { key: "ArrowRight", handler: () => navigateGrid("right"), preventDefault: true },
+      // Enter - Open selected item
+      { key: "Enter", handler: openSelectedItem, preventDefault: true },
+      // Delete/Backspace - Delete selected items
+      { key: "Delete", handler: deleteSelected, preventDefault: true },
+      { key: "Backspace", handler: deleteSelected, preventDefault: true },
     ],
     enabled: isLibraryOpen,
   });
@@ -131,6 +228,15 @@ function App() {
   // Check for existing library on mount
   useEffect(() => {
     const checkLibrary = async () => {
+      // Check if running in Tauri context
+      // @ts-expect-error - __TAURI_INTERNALS__ is injected by Tauri
+      const hasTauri = typeof window.__TAURI_INTERNALS__?.invoke === "function";
+      if (!hasTauri) {
+        console.log("Not running in Tauri context - skipping library check");
+        setIsCheckingLibrary(false);
+        return;
+      }
+
       try {
         const isOpen = await tauri.isLibraryOpen();
         if (isOpen) {
@@ -153,14 +259,16 @@ function App() {
 
     const loadData = async () => {
       try {
-        const [foldersData, tagsData, statsData] = await Promise.all([
+        const [foldersData, tagsData, statsData, trashCountData] = await Promise.all([
           tauri.getFolders(),
           tauri.getTags(),
           tauri.getLibraryStats(),
+          tauri.getTrashCount(),
         ]);
         setFolders(foldersData);
         setTags(tagsData);
         setStats(statsData);
+        setTrashCount(trashCountData);
       } catch (err) {
         console.error("Failed to load data:", err);
       }
@@ -169,6 +277,14 @@ function App() {
     loadData();
   }, [isLibraryOpen]);
 
+  // Debounce search query (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Load items when filter changes
   useEffect(() => {
     if (!isLibraryOpen) return;
@@ -176,12 +292,21 @@ function App() {
     const loadItems = async () => {
       setIsLoading(true);
       try {
+        // Special handling for trash view
+        if (currentView === "trash") {
+          const trashedItems = await tauri.getTrashedItems();
+          setItems(trashedItems);
+          setIsLoading(false);
+          return;
+        }
+
         const filter: Parameters<typeof tauri.getItems>[0] = {
           sortBy: sortBy as "created_at" | "updated_at" | "title",
           sortOrder,
-          searchQuery: searchQuery || undefined,
+          searchQuery: debouncedSearchQuery || undefined,
         };
 
+        // Apply view-specific filters
         if (currentView === "favorites") {
           filter.isFavorited = true;
         } else if (currentView === "images") {
@@ -194,6 +319,18 @@ function App() {
           filter.tagIds = [currentTagId];
         }
 
+        // Apply toolbar filters (only when not in a view-specific context)
+        if (currentView === "all" || currentView === "folder") {
+          // Type filter from toolbar
+          if (filterType !== "all") {
+            filter.itemType = filterType;
+          }
+          // Tag filter from toolbar (combine with existing if any)
+          if (filterTagIds.length > 0) {
+            filter.tagIds = [...(filter.tagIds || []), ...filterTagIds];
+          }
+        }
+
         const itemsData = await tauri.getItems(filter);
         setItems(itemsData);
       } catch (err) {
@@ -204,18 +341,26 @@ function App() {
     };
 
     loadItems();
-  }, [isLibraryOpen, currentView, currentFolderId, currentTagId, sortBy, sortOrder, searchQuery]);
+  }, [isLibraryOpen, currentView, currentFolderId, currentTagId, sortBy, sortOrder, debouncedSearchQuery, filterType, filterTagIds]);
 
   const handleLibrarySetup = (path: string) => {
     setLibraryPath(path);
     setIsLibraryOpen(true);
   };
 
-  const handleSelectView = (view: "all" | "inbox" | "favorites" | "images" | "bookmarks") => {
+  const handleSelectView = (view: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "trash") => {
     setCurrentView(view);
     setCurrentFolderId(null);
     setCurrentTagId(null);
     setSelectedIds(new Set());
+    // Clear toolbar filters when switching views
+    setFilterType("all");
+    setFilterTagIds([]);
+  };
+
+  const handleClearFilters = () => {
+    setFilterType("all");
+    setFilterTagIds([]);
   };
 
   const handleSelectFolder = (folderId: string) => {
@@ -378,7 +523,12 @@ function App() {
 
   const handleDeleteItem = async (itemId: string) => {
     try {
-      await tauri.deleteItem(itemId);
+      // Use soft delete (move to trash) for normal views, permanent delete for trash view
+      if (currentView === "trash") {
+        await tauri.permanentDeleteItems([itemId]);
+      } else {
+        await tauri.softDeleteItems([itemId]);
+      }
       setItems((prev) => prev.filter((item) => item.id !== itemId));
       setSelectedIds((prev) => {
         const newSet = new Set(prev);
@@ -389,8 +539,12 @@ function App() {
         setIsDetailOpen(false);
         setDetailItem(null);
       }
-      const statsData = await tauri.getLibraryStats();
+      const [statsData, trashCountData] = await Promise.all([
+        tauri.getLibraryStats(),
+        tauri.getTrashCount(),
+      ]);
       setStats(statsData);
+      setTrashCount(trashCountData);
     } catch (err) {
       console.error("Failed to delete item:", err);
     }
@@ -407,6 +561,89 @@ function App() {
       );
     } catch (err) {
       console.error("Failed to move item:", err);
+    }
+  };
+
+  // Multi-selection handlers for context menu
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      // Use soft delete (move to trash) for normal views, permanent delete for trash view
+      if (currentView === "trash") {
+        await tauri.permanentDeleteItems(ids);
+      } else {
+        await tauri.softDeleteItems(ids);
+      }
+      setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+      if (detailItem && selectedIds.has(detailItem.id)) {
+        setIsDetailOpen(false);
+        setDetailItem(null);
+      }
+      setSelectedIds(new Set());
+      const [statsData, trashCountData] = await Promise.all([
+        tauri.getLibraryStats(),
+        tauri.getTrashCount(),
+      ]);
+      setStats(statsData);
+      setTrashCount(trashCountData);
+    } catch (err) {
+      console.error("Failed to delete items:", err);
+    }
+  };
+
+  const handleMoveSelectedToFolder = async (folderId: string | null) => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      await tauri.moveItemsToFolder(ids, folderId);
+      setItems((prev) =>
+        prev.map((item) =>
+          selectedIds.has(item.id) ? { ...item, folderId } : item
+        )
+      );
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+    } catch (err) {
+      console.error("Failed to move items:", err);
+    }
+  };
+
+  // Trash-specific handlers
+  const handleRestoreSelected = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const ids = Array.from(selectedIds) as string[];
+      await tauri.restoreItems(ids);
+      setItems((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+      setSelectedIds(new Set());
+      const [statsData, trashCountData] = await Promise.all([
+        tauri.getLibraryStats(),
+        tauri.getTrashCount(),
+      ]);
+      setStats(statsData);
+      setTrashCount(trashCountData);
+    } catch (err) {
+      console.error("Failed to restore items:", err);
+    }
+  };
+
+  const [emptyTrashDialogOpen, setEmptyTrashDialogOpen] = useState(false);
+
+  const handleEmptyTrash = async () => {
+    try {
+      await tauri.emptyTrash();
+      setItems([]);
+      setSelectedIds(new Set());
+      const [statsData, trashCountData] = await Promise.all([
+        tauri.getLibraryStats(),
+        tauri.getTrashCount(),
+      ]);
+      setStats(statsData);
+      setTrashCount(trashCountData);
+      setEmptyTrashDialogOpen(false);
+    } catch (err) {
+      console.error("Failed to empty trash:", err);
     }
   };
 
@@ -460,44 +697,115 @@ function App() {
     }
   };
 
-  const handleRenameFolder = (folderId: string) => {
-    // TODO: Open rename dialog
-    console.log("Rename folder:", folderId);
-  };
-
-  const handleDeleteFolder = async (folderId: string) => {
+  const handleRenameFolder = async (folderId: string, newName: string) => {
     try {
-      await tauri.deleteFolder(folderId);
+      await tauri.renameFolder(folderId, newName);
       const foldersData = await tauri.getFolders();
       setFolders(foldersData);
-      if (currentFolderId === folderId) {
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+    }
+  };
+
+  const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<string | null>(null);
+  const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
+
+  const handleDeleteFolder = (folderId: string) => {
+    setDeleteConfirmFolderId(folderId);
+  };
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteConfirmFolderId) return;
+    try {
+      await tauri.deleteFolder(deleteConfirmFolderId);
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+      if (currentFolderId === deleteConfirmFolderId) {
         setCurrentView("all");
         setCurrentFolderId(null);
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+    } finally {
+      setDeleteConfirmFolderId(null);
+    }
+  };
+
+  const handleFolderDragOver = (folderId: string) => {
+    setDragTargetFolderId(folderId);
+  };
+
+  const handleFolderDrop = async (folderId: string) => {
+    if (selectedIds.size === 0) {
+      setDragTargetFolderId(null);
+      return;
+    }
+    try {
+      const itemIds = Array.from(selectedIds) as string[];
+      await tauri.moveItemsToFolder(itemIds, folderId);
+      const itemsData = await tauri.getItems();
+      setItems(itemsData);
+      const foldersData = await tauri.getFolders();
+      setFolders(foldersData);
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Failed to move items to folder:", err);
+    } finally {
+      setDragTargetFolderId(null);
     }
   };
 
   const handleCreateTag = () => {
-    setNewTagName("");
-    setNewTagDialogOpen(true);
+    setEditingTag(null);
+    setTagDialogOpen(true);
   };
 
-  const handleSubmitNewTag = async () => {
-    if (!newTagName.trim()) return;
+  const handleEditTag = (tag: Tag) => {
+    setEditingTag(tag);
+    setTagDialogOpen(true);
+  };
 
+  const handleTagDialogSubmit = async (name: string, color: string) => {
     try {
-      await tauri.createTag(newTagName.trim());
+      if (editingTag) {
+        // Edit existing tag
+        await tauri.updateTag(editingTag.id, name, color);
+      } else {
+        // Create new tag
+        await tauri.createTag(name, color);
+      }
       const tagsData = await tauri.getTags();
       setTags(tagsData);
-      setNewTagDialogOpen(false);
+      setTagDialogOpen(false);
+      setEditingTag(null);
     } catch (err) {
-      console.error("Failed to create tag:", err);
+      console.error("Failed to save tag:", err);
     }
   };
 
-  const handleFilesDropped = async (paths: string[], skippedCount: number = 0) => {
+  const [deleteConfirmTagId, setDeleteConfirmTagId] = useState<string | null>(null);
+
+  const handleDeleteTag = (tagId: string) => {
+    setDeleteConfirmTagId(tagId);
+  };
+
+  const confirmDeleteTag = async () => {
+    if (!deleteConfirmTagId) return;
+    try {
+      await tauri.deleteTag(deleteConfirmTagId);
+      const tagsData = await tauri.getTags();
+      setTags(tagsData);
+      if (currentTagId === deleteConfirmTagId) {
+        handleSelectView("all");
+      }
+    } catch (err) {
+      console.error("Failed to delete tag:", err);
+    } finally {
+      setDeleteConfirmTagId(null);
+    }
+  };
+
+  const handleFilesDropped = useCallback(async (paths: string[], skippedCount: number = 0) => {
     if (paths.length === 0) {
       if (skippedCount > 0) {
         setImportToast({
@@ -538,7 +846,7 @@ function App() {
         details: err instanceof Error ? err.message : "Unknown error",
       });
     }
-  };
+  }, [currentFolderId]);
 
   const handleImportFiles = async () => {
     try {
@@ -562,27 +870,13 @@ function App() {
   };
 
   const handleAddBookmark = () => {
-    setBookmarkUrl("");
     setBookmarkDialogOpen(true);
   };
 
-  const handleSubmitBookmark = async () => {
-    if (!bookmarkUrl.trim()) return;
-
-    try {
-      const imported = await tauri.importBookmark(
-        bookmarkUrl.trim(),
-        undefined,
-        undefined,
-        currentFolderId || undefined
-      );
-      setItems((prev) => [imported, ...prev]);
-      const statsData = await tauri.getLibraryStats();
-      setStats(statsData);
-      setBookmarkDialogOpen(false);
-    } catch (err) {
-      console.error("Failed to import bookmark:", err);
-    }
+  const handleBookmarkImported = async (item: Item) => {
+    setItems((prev) => [item, ...prev]);
+    const statsData = await tauri.getLibraryStats();
+    setStats(statsData);
   };
 
   const getViewTitle = () => {
@@ -597,6 +891,8 @@ function App() {
         return "Images";
       case "bookmarks":
         return "Bookmarks";
+      case "trash":
+        return "Trash";
       case "folder": {
         const folder = findFolder(folders, currentFolderId);
         return folder?.name || "Folder";
@@ -652,16 +948,22 @@ function App() {
           onRenameFolder={handleRenameFolder}
           onDeleteFolder={handleDeleteFolder}
           onCreateTag={handleCreateTag}
+          onEditTag={handleEditTag}
+          onDeleteTag={handleDeleteTag}
           onOpenSettings={() => setIsSettingsOpen(true)}
           stats={stats}
+          trashCount={trashCount}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
+          dragTargetFolderId={dragTargetFolderId}
+          onFolderDragOver={handleFolderDragOver}
+          onFolderDrop={handleFolderDrop}
         />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col">
           {/* Titlebar drag region */}
-          <div className="h-8 titlebar-drag-region flex-shrink-0 bg-surface" />
+          <div data-tauri-drag-region className="h-8 titlebar-drag-region flex-shrink-0 bg-surface" />
 
           {/* Toolbar */}
           <Toolbar
@@ -675,12 +977,22 @@ function App() {
               setSortBy(by);
               setSortOrder(order);
             }}
+            filterType={filterType}
+            onFilterTypeChange={setFilterType}
+            filterTagIds={filterTagIds}
+            onFilterTagsChange={setFilterTagIds}
+            allTags={tags}
+            onClearFilters={handleClearFilters}
             onAddBookmark={handleAddBookmark}
             onImportFiles={handleImportFiles}
             title={getViewTitle()}
             searchInputRef={searchInputRef}
             selectionCount={selectedIds.size}
             onClearSelection={() => setSelectedIds(new Set())}
+            isTrashView={currentView === "trash"}
+            onRestoreSelected={handleRestoreSelected}
+            onDeleteSelectedPermanently={handleDeleteSelected}
+            onEmptyTrash={() => setEmptyTrashDialogOpen(true)}
           />
 
           {/* Item Grid with Drop Zone */}
@@ -689,11 +1001,15 @@ function App() {
               items={items}
               viewMode={viewMode}
               selectedIds={selectedIds}
+              searchQuery={debouncedSearchQuery}
+              emptyStateContext={currentView}
               onSelect={handleSelectItem}
               onOpen={handleOpenItem}
               onToggleFavorite={handleToggleFavorite}
               onDelete={handleDeleteItem}
+              onDeleteSelected={handleDeleteSelected}
               onMoveToFolder={handleMoveToFolder}
+              onMoveSelectedToFolder={handleMoveSelectedToFolder}
               onAddTag={handleAddTag}
               folders={folders}
               libraryPath={libraryPath}
@@ -726,53 +1042,86 @@ function App() {
           </DialogContent>
         </Dialog>
 
-        {/* New Tag Dialog */}
-        <Dialog open={newTagDialogOpen} onOpenChange={setNewTagDialogOpen}>
+        {/* Tag Dialog (Create/Edit) */}
+        <TagDialog
+          isOpen={tagDialogOpen}
+          onClose={() => {
+            setTagDialogOpen(false);
+            setEditingTag(null);
+          }}
+          onSubmit={handleTagDialogSubmit}
+          editTag={editingTag}
+        />
+
+        {/* Delete Tag Confirmation */}
+        <Dialog open={deleteConfirmTagId !== null} onOpenChange={() => setDeleteConfirmTagId(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Tag</DialogTitle>
+              <DialogTitle>Delete Tag</DialogTitle>
             </DialogHeader>
-            <Input
-              value={newTagName}
-              onChange={(e) => setNewTagName(e.target.value)}
-              placeholder="Tag name"
-              onKeyDown={(e) => e.key === "Enter" && handleSubmitNewTag()}
-              autoFocus
-            />
+            <p className="text-sm text-text-muted">
+              Are you sure you want to delete this tag? It will be removed from all items.
+            </p>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setNewTagDialogOpen(false)}>
+              <Button variant="ghost" onClick={() => setDeleteConfirmTagId(null)}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmitNewTag} disabled={!newTagName.trim()}>
-                Create
+              <Button variant="destructive" onClick={confirmDeleteTag}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Folder Confirmation */}
+        <Dialog open={deleteConfirmFolderId !== null} onOpenChange={() => setDeleteConfirmFolderId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Folder</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-text-muted">
+              Are you sure you want to delete this folder? Items inside will be moved to the root level.
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteConfirmFolderId(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteFolder}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Empty Trash Confirmation */}
+        <Dialog open={emptyTrashDialogOpen} onOpenChange={setEmptyTrashDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Empty Trash</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-text-muted">
+              Are you sure you want to permanently delete all items in the trash? This action cannot be undone.
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEmptyTrashDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleEmptyTrash}>
+                Empty Trash
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Bookmark Dialog */}
-        <Dialog open={bookmarkDialogOpen} onOpenChange={setBookmarkDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Bookmark</DialogTitle>
-            </DialogHeader>
-            <Input
-              value={bookmarkUrl}
-              onChange={(e) => setBookmarkUrl(e.target.value)}
-              placeholder="https://example.com"
-              onKeyDown={(e) => e.key === "Enter" && handleSubmitBookmark()}
-              autoFocus
-            />
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setBookmarkDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmitBookmark} disabled={!bookmarkUrl.trim()}>
-                Add
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <BookmarkImportDialog
+          isOpen={bookmarkDialogOpen}
+          onClose={() => setBookmarkDialogOpen(false)}
+          onImported={handleBookmarkImported}
+          folders={folders}
+          tags={tags}
+          currentFolderId={currentFolderId}
+        />
 
         {/* Item Detail Panel */}
         <ItemDetailPanel
@@ -821,7 +1170,22 @@ function App() {
           }}
           onChangeLibrary={() => {
             setIsSettingsOpen(false);
-            // TODO: Implement change library flow
+            // Clear current state before showing wizard
+            setItems([]);
+            setFolders([]);
+            setTags([]);
+            setSelectedIds(new Set());
+            setDetailItem(null);
+            setCurrentView("all");
+            setCurrentFolderId(null);
+            setCurrentTagId(null);
+            setSearchQuery("");
+            setFilterType("all");
+            setFilterTagIds([]);
+            setTrashCount(0);
+            // Return to setup wizard
+            setIsLibraryOpen(false);
+            setLibraryPath(null);
           }}
           onCloseLibrary={() => {
             setIsSettingsOpen(false);

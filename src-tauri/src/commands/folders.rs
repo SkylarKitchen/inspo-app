@@ -1,9 +1,74 @@
 use crate::AppState;
 use rusqlite::params;
 use std::fs;
+use std::path::Path;
 use tauri::State;
 
 use super::Folder;
+
+/// Sanitize a folder name to prevent path traversal attacks.
+/// Removes path separators and parent directory references.
+fn sanitize_folder_name(name: &str) -> Result<String, String> {
+    // Reject empty names
+    if name.trim().is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+
+    // Reject names that are just dots
+    if name == "." || name == ".." {
+        return Err("Invalid folder name".to_string());
+    }
+
+    // Check for path separators or null bytes
+    if name.contains('/') || name.contains('\\') || name.contains('\0') {
+        return Err("Folder name cannot contain path separators".to_string());
+    }
+
+    // Check for parent directory references anywhere in the name
+    if name.contains("..") {
+        return Err("Folder name cannot contain '..'".to_string());
+    }
+
+    Ok(name.to_string())
+}
+
+/// Validate that a path stays within the library directory.
+/// Returns the validated full path if safe, or an error if path escapes.
+fn validate_path_within_library(library_path: &Path, relative_path: &str) -> Result<std::path::PathBuf, String> {
+    let full_path = library_path.join(relative_path);
+
+    // Canonicalize both paths for comparison
+    // Note: The full_path may not exist yet, so we canonicalize the parent
+    let canonical_library = library_path.canonicalize()
+        .map_err(|e| format!("Failed to resolve library path: {}", e))?;
+
+    // For new paths that don't exist, we check each component
+    let mut check_path = canonical_library.clone();
+    for component in Path::new(relative_path).components() {
+        use std::path::Component;
+        match component {
+            Component::Normal(name) => {
+                check_path = check_path.join(name);
+            }
+            Component::ParentDir => {
+                return Err("Path cannot contain parent directory references".to_string());
+            }
+            Component::CurDir => {
+                // Current directory reference is okay
+            }
+            _ => {
+                return Err("Invalid path component".to_string());
+            }
+        }
+    }
+
+    // Verify the constructed path is still under the library
+    if !check_path.starts_with(&canonical_library) {
+        return Err("Path escapes library directory".to_string());
+    }
+
+    Ok(full_path)
+}
 
 /// Get all folders as a tree structure
 #[tauri::command]
@@ -92,6 +157,9 @@ pub fn create_folder(
     name: String,
     parent_id: Option<String>,
 ) -> Result<Folder, String> {
+    // Sanitize the folder name first
+    let sanitized_name = sanitize_folder_name(&name)?;
+
     let library_path = state
         .library_path
         .lock()
@@ -110,13 +178,15 @@ pub fn create_folder(
                 row.get(0)
             })
             .map_err(|e| e.to_string())?;
-        format!("{}/{}", parent_path, name)
+        format!("{}/{}", parent_path, sanitized_name)
     } else {
-        name.clone()
+        sanitized_name.clone()
     };
 
+    // Validate the path stays within the library
+    let full_path = validate_path_within_library(&library_path, &path)?;
+
     // Create the filesystem directory
-    let full_path = library_path.join(&path);
     fs::create_dir_all(&full_path).map_err(|e| e.to_string())?;
 
     // Get the next sort order
@@ -134,13 +204,13 @@ pub fn create_folder(
     conn.execute(
         "INSERT INTO folders (id, name, parent_id, path, sort_order, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![id, name, parent_id, path, sort_order, now, now],
+        params![id, sanitized_name, parent_id, path, sort_order, now, now],
     )
     .map_err(|e| e.to_string())?;
 
     Ok(Folder {
         id,
-        name,
+        name: sanitized_name,
         parent_id,
         path,
         sort_order,
@@ -158,6 +228,9 @@ pub fn rename_folder(
     id: String,
     new_name: String,
 ) -> Result<Folder, String> {
+    // Sanitize the new folder name first
+    let sanitized_name = sanitize_folder_name(&new_name)?;
+
     let library_path = state
         .library_path
         .lock()
@@ -182,17 +255,19 @@ pub fn rename_folder(
     let new_path = if let Some(ref _pid) = parent_id {
         let parts: Vec<&str> = current_path.rsplitn(2, '/').collect();
         if parts.len() > 1 {
-            format!("{}/{}", parts[1], new_name)
+            format!("{}/{}", parts[1], sanitized_name)
         } else {
-            new_name.clone()
+            sanitized_name.clone()
         }
     } else {
-        new_name.clone()
+        sanitized_name.clone()
     };
+
+    // Validate the new path stays within the library
+    let new_full_path = validate_path_within_library(&library_path, &new_path)?;
 
     // Rename filesystem directory
     let old_full_path = library_path.join(&current_path);
-    let new_full_path = library_path.join(&new_path);
     if old_full_path.exists() {
         fs::rename(&old_full_path, &new_full_path).map_err(|e| e.to_string())?;
     }
@@ -202,7 +277,7 @@ pub fn rename_folder(
     // Update database
     conn.execute(
         "UPDATE folders SET name = ?1, path = ?2, updated_at = ?3 WHERE id = ?4",
-        params![new_name, new_path, now, id],
+        params![sanitized_name, new_path, now, id],
     )
     .map_err(|e| e.to_string())?;
 

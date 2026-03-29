@@ -68,6 +68,31 @@ export async function deleteItems(itemIds: string[]): Promise<void> {
   return invoke("delete_items", { itemIds });
 }
 
+// Trash commands
+export async function softDeleteItems(itemIds: string[]): Promise<void> {
+  return invoke("soft_delete_items", { itemIds });
+}
+
+export async function getTrashedItems(): Promise<Item[]> {
+  return invoke("get_trashed_items");
+}
+
+export async function getTrashCount(): Promise<number> {
+  return invoke("get_trash_count");
+}
+
+export async function restoreItems(itemIds: string[]): Promise<void> {
+  return invoke("restore_items", { itemIds });
+}
+
+export async function permanentDeleteItems(itemIds: string[]): Promise<void> {
+  return invoke("permanent_delete_items", { itemIds });
+}
+
+export async function emptyTrash(): Promise<void> {
+  return invoke("empty_trash");
+}
+
 // Folder commands
 export async function getFolders(): Promise<Folder[]> {
   return invoke("get_folders");

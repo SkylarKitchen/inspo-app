@@ -11,6 +11,8 @@ import {
   Tag,
   Settings,
   GripVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,49 +25,27 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { Folder as FolderType, Tag as TagType } from "@/types";
-
-const SIDEBAR_WIDTH_KEY = "inspo:sidebar-width";
-const MIN_SIDEBAR_WIDTH = 180;
-const MAX_SIDEBAR_WIDTH = 400;
-const DEFAULT_SIDEBAR_WIDTH = 224; // 14rem = 224px
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function getSavedSidebarWidth(): number {
-  try {
-    const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    if (saved) {
-      const width = parseInt(saved, 10);
-      if (width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) {
-        return width;
-      }
-    }
-  } catch {
-    // Ignore localStorage errors
-  }
-  return DEFAULT_SIDEBAR_WIDTH;
-}
-
-function saveSidebarWidth(width: number): void {
-  try {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
-  } catch {
-    // Ignore localStorage errors
-  }
-}
+import {
+  MIN_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  saveSidebarWidth,
+} from "@/lib/sidebar-utils";
 
 interface SidebarProps {
   folders: FolderType[];
   tags: TagType[];
   currentFolderId: string | null;
-  currentView: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag";
+  currentView: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "folder" | "tag" | "trash";
   currentTagId: string | null;
-  onSelectView: (view: "all" | "inbox" | "favorites" | "images" | "bookmarks") => void;
+  onSelectView: (view: "all" | "inbox" | "favorites" | "images" | "bookmarks" | "trash") => void;
   onSelectFolder: (folderId: string) => void;
   onSelectTag: (tagId: string) => void;
   onCreateFolder: (parentId?: string) => void;
-  onRenameFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onCreateTag: () => void;
+  onEditTag: (tag: TagType) => void;
+  onDeleteTag: (tagId: string) => void;
   onOpenSettings: () => void;
   stats: {
     totalItems: number;
@@ -73,8 +53,12 @@ interface SidebarProps {
     totalBookmarks: number;
     favoritesCount: number;
   };
+  trashCount: number;
   width: number;
   onWidthChange: (width: number) => void;
+  dragTargetFolderId?: string | null;
+  onFolderDragOver?: (folderId: string) => void;
+  onFolderDrop?: (folderId: string) => void;
 }
 
 interface FolderItemProps {
@@ -83,8 +67,12 @@ interface FolderItemProps {
   currentFolderId: string | null;
   onSelect: (folderId: string) => void;
   onCreateFolder: (parentId: string) => void;
-  onRenameFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
   onDeleteFolder: (folderId: string) => void;
+  onDragOver?: (folderId: string) => void;
+  onDrop?: (folderId: string) => void;
+  isDragTarget?: boolean;
+  dragTargetFolderId?: string | null;
 }
 
 function FolderItem({
@@ -95,44 +83,126 @@ function FolderItem({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onDragOver,
+  onDrop,
+  dragTargetFolderId,
 }: FolderItemProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(folder.name);
+  const inputRef = useRef<HTMLInputElement>(null);
   const hasChildren = folder.children && folder.children.length > 0;
   const isSelected = currentFolderId === folder.id;
+  const isDragTarget = dragTargetFolderId === folder.id;
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditName(folder.name);
+    setIsEditing(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== folder.name) {
+      onRenameFolder(folder.id, trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setEditName(folder.name);
+      setIsEditing(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDragOver?.(folder.id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDrop?.(folder.id);
+  };
 
   return (
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <button
-            onClick={() => onSelect(folder.id)}
+            onClick={() => !isEditing && onSelect(folder.id)}
+            onDoubleClick={handleDoubleClick}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={cn(
               "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg transition-all duration-150",
               "hover:bg-sidebar-hover",
-              isSelected && "bg-primary-subtle text-primary font-medium"
+              isSelected && "bg-primary-subtle text-primary font-medium",
+              isDragTarget && "bg-primary/20 ring-2 ring-primary ring-inset"
             )}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
           >
             {hasChildren ? (
-              <button
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsExpanded(!isExpanded);
                 }}
-                className="p-0.5 hover:bg-surface-active rounded transition-colors"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsExpanded(!isExpanded);
+                  }
+                }}
+                className="p-0.5 hover:bg-surface-active rounded transition-colors cursor-pointer"
               >
                 {isExpanded ? (
                   <ChevronDown className="w-3 h-3 text-text-subtle" />
                 ) : (
                   <ChevronRight className="w-3 h-3 text-text-subtle" />
                 )}
-              </button>
+              </span>
             ) : (
               <span className="w-4" />
             )}
             <Folder className={cn("w-4 h-4", isSelected ? "text-primary" : "text-text-muted")} />
-            <span className="flex-1 text-left truncate">{folder.name}</span>
-            {folder.itemCount > 0 && (
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={handleKeyDown}
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 px-1 py-0 text-sm bg-background border border-primary rounded outline-none"
+              />
+            ) : (
+              <span className="flex-1 text-left truncate">{folder.name}</span>
+            )}
+            {!isEditing && folder.itemCount > 0 && (
               <span className={cn("text-xs tabular-nums", isSelected ? "text-primary-muted" : "text-text-subtle")}>{folder.itemCount}</span>
             )}
           </button>
@@ -142,7 +212,10 @@ function FolderItem({
             <FolderPlus className="w-4 h-4 mr-2" />
             New Subfolder
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => onRenameFolder(folder.id)}>
+          <ContextMenuItem onClick={() => {
+            setEditName(folder.name);
+            setIsEditing(true);
+          }}>
             Rename
           </ContextMenuItem>
           <ContextMenuSeparator />
@@ -166,6 +239,9 @@ function FolderItem({
               onCreateFolder={onCreateFolder}
               onRenameFolder={onRenameFolder}
               onDeleteFolder={onDeleteFolder}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              dragTargetFolderId={dragTargetFolderId}
             />
           ))}
         </div>
@@ -187,10 +263,16 @@ export function Sidebar({
   onRenameFolder,
   onDeleteFolder,
   onCreateTag,
+  onEditTag,
+  onDeleteTag,
   onOpenSettings,
   stats,
+  trashCount,
   width,
   onWidthChange,
+  dragTargetFolderId,
+  onFolderDragOver,
+  onFolderDrop,
 }: SidebarProps) {
   const [foldersExpanded, setFoldersExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
@@ -236,6 +318,7 @@ export function Sidebar({
     { id: "favorites", label: "Favorites", icon: Heart, count: stats.favoritesCount },
     { id: "images", label: "Images", icon: Images, count: stats.totalImages },
     { id: "bookmarks", label: "Bookmarks", icon: Link, count: stats.totalBookmarks },
+    { id: "trash", label: "Trash", icon: Trash2, count: trashCount },
   ] as const;
 
   return (
@@ -245,7 +328,7 @@ export function Sidebar({
       style={{ width: `${width}px`, minWidth: `${MIN_SIDEBAR_WIDTH}px`, maxWidth: `${MAX_SIDEBAR_WIDTH}px` }}
     >
       {/* Titlebar drag region */}
-      <div className="h-8 titlebar-drag-region flex-shrink-0" />
+      <div data-tauri-drag-region className="h-8 titlebar-drag-region flex-shrink-0" />
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-4">
@@ -277,9 +360,17 @@ export function Sidebar({
 
           {/* Folders Section */}
           <div>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setFoldersExpanded(!foldersExpanded)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setFoldersExpanded(!foldersExpanded);
+                }
+              }}
+              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors cursor-pointer"
             >
               <span className="flex items-center flex-1 section-header">Folders</span>
               <div className="flex items-center gap-1">
@@ -294,13 +385,18 @@ export function Sidebar({
                 >
                   <FolderPlus className="w-3 h-3" />
                 </Button>
-                {foldersExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                <span
+                  className="flex items-center"
+                  aria-hidden="true"
+                >
+                  {foldersExpanded ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3" />
+                  )}
+                </span>
               </div>
-            </button>
+            </div>
             {foldersExpanded && (
               <div className="space-y-0.5">
                 {folders.map((folder) => (
@@ -313,6 +409,9 @@ export function Sidebar({
                     onCreateFolder={onCreateFolder}
                     onRenameFolder={onRenameFolder}
                     onDeleteFolder={onDeleteFolder}
+                    onDragOver={onFolderDragOver}
+                    onDrop={onFolderDrop}
+                    dragTargetFolderId={dragTargetFolderId}
                   />
                 ))}
                 {folders.length === 0 && (
@@ -324,9 +423,17 @@ export function Sidebar({
 
           {/* Tags Section */}
           <div>
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setTagsExpanded(!tagsExpanded)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setTagsExpanded(!tagsExpanded);
+                }
+              }}
+              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-text-subtle uppercase tracking-widest hover:text-text transition-colors cursor-pointer"
             >
               <span className="flex items-center flex-1 section-header">Tags</span>
               <div className="flex items-center gap-1">
@@ -341,34 +448,56 @@ export function Sidebar({
                 >
                   <Tag className="w-3 h-3" />
                 </Button>
-                {tagsExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                <span
+                  className="flex items-center"
+                  aria-hidden="true"
+                >
+                  {tagsExpanded ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3" />
+                  )}
+                </span>
               </div>
-            </button>
+            </div>
             {tagsExpanded && (
               <div className="space-y-0.5 mt-1">
                 {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => onSelectTag(tag.id)}
-                    className={cn(
-                      "w-full flex items-center gap-2.5 px-2.5 py-2 text-sm rounded-lg transition-all duration-150",
-                      "hover:bg-sidebar-hover",
-                      currentTagId === tag.id && "bg-primary-subtle text-primary font-medium"
-                    )}
-                  >
-                    <div
-                      className="w-2.5 h-2.5 rounded-full ring-1 ring-black/5"
-                      style={{ backgroundColor: tag.color || "#C75B3F" }}
-                    />
-                    <span className="flex-1 text-left truncate">{tag.name}</span>
-                    {tag.itemCount > 0 && (
-                      <span className={cn("text-xs tabular-nums", currentTagId === tag.id ? "text-primary-muted" : "text-text-subtle")}>{tag.itemCount}</span>
-                    )}
-                  </button>
+                  <ContextMenu key={tag.id}>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        onClick={() => onSelectTag(tag.id)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-2.5 py-2 text-sm rounded-lg transition-all duration-150",
+                          "hover:bg-sidebar-hover",
+                          currentTagId === tag.id && "bg-primary-subtle text-primary font-medium"
+                        )}
+                      >
+                        <div
+                          className="w-2.5 h-2.5 rounded-full ring-1 ring-black/5"
+                          style={{ backgroundColor: tag.color || "#C75B3F" }}
+                        />
+                        <span className="flex-1 text-left truncate">{tag.name}</span>
+                        {tag.itemCount > 0 && (
+                          <span className={cn("text-xs tabular-nums", currentTagId === tag.id ? "text-primary-muted" : "text-text-subtle")}>{tag.itemCount}</span>
+                        )}
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={() => onEditTag(tag)}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Tag
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onClick={() => onDeleteTag(tag.id)}
+                        className="text-danger focus:text-danger"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Tag
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 ))}
                 {tags.length === 0 && (
                   <p className="px-2.5 py-2 text-xs text-text-subtle italic">No tags yet</p>

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { open } from "@tauri-apps/plugin-shell";
 import {
   X,
   Sun,
@@ -144,12 +145,30 @@ export function SettingsPanel({
   onChangeLibrary,
   onCloseLibrary,
 }: SettingsPanelProps) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>(() => {
+    // Load from localStorage on init
+    const saved = localStorage.getItem("inspo:theme");
+    return (saved as Theme) || "system";
+  });
+
+  // Apply theme to document and persist
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("inspo:theme", theme);
+  }, [theme]);
 
   const handleThemeChange = (newTheme: Theme) => {
     setTheme(newTheme);
-    // In a real app, this would update the actual theme
-    // document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  };
+
+  const handleViewOnGitHub = async () => {
+    await open("https://github.com/skylarkitchen/inspo-app");
+  };
+
+  const handleClearCache = async () => {
+    // Clear thumbnail cache would require a Tauri command
+    // For now, just show feedback
+    alert("Cache clearing not yet implemented");
   };
 
   return (
@@ -285,7 +304,7 @@ export function SettingsPanel({
                 label="Cache"
                 description="Thumbnail cache and temporary files"
                 action={
-                  <Button variant="ghost" size="sm" className="text-xs">
+                  <Button variant="ghost" size="sm" className="text-xs" onClick={handleClearCache}>
                     Clear
                   </Button>
                 }
@@ -304,9 +323,7 @@ export function SettingsPanel({
               <SettingRow
                 icon={<ExternalLink size={18} />}
                 label="View on GitHub"
-                onClick={() => {
-                  // Open GitHub repo
-                }}
+                onClick={handleViewOnGitHub}
               />
             </SettingSection>
 

@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Upload } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 
 interface DropZoneProps {
   onFilesDropped: (paths: string[], skippedCount: number) => void;
@@ -7,102 +8,99 @@ interface DropZoneProps {
   disabled?: boolean;
 }
 
+interface DragPayload {
+  paths: string[];
+  position: { x: number; y: number };
+}
+
 export function DropZone({ onFilesDropped, children, disabled }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [, setDragCounter] = useState(0);
+  // Use ref to store callback so listener doesn't need to be re-registered
+  const onFilesDroppedRef = useRef(onFilesDropped);
 
-  const handleDragEnter = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (disabled) return;
+  // Update ref in effect to avoid lint warning about ref access during render
+  useEffect(() => {
+    onFilesDroppedRef.current = onFilesDropped;
+  }, [onFilesDropped]);
 
-      setDragCounter((c) => c + 1);
-      if (e.dataTransfer.types.includes("Files")) {
-        setIsDragOver(true);
-      }
-    },
-    [disabled]
-  );
+  useEffect(() => {
+    if (disabled) return;
 
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (disabled) return;
+    let isCancelled = false;
+    let unlistenDrop: (() => void) | undefined;
+    let unlistenEnter: (() => void) | undefined;
+    let unlistenLeave: (() => void) | undefined;
 
-      setDragCounter((c) => {
-        const newCount = c - 1;
-        if (newCount === 0) {
-          setIsDragOver(false);
+    const setupListeners = async () => {
+      // Listen for file drops (Tauri v2 event)
+      const dropUnlisten = await listen<DragPayload>("tauri://drag-drop", (event) => {
+        if (isCancelled) return;
+        setIsDragOver(false);
+        const paths = event.payload.paths;
+
+        // Filter for images
+        const imagePaths = paths.filter(path =>
+          /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i.test(path)
+        );
+
+        const skippedCount = paths.length - imagePaths.length;
+
+        // Always report result even if empty
+        if (paths.length > 0) {
+          onFilesDroppedRef.current(imagePaths, skippedCount);
         }
-        return newCount;
       });
-    },
-    [disabled]
-  );
+      if (isCancelled) { dropUnlisten(); return; }
+      unlistenDrop = dropUnlisten;
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
+      const enterUnlisten = await listen<DragPayload>("tauri://drag-enter", () => {
+        if (isCancelled) return;
+        setIsDragOver(true);
+      });
+      if (isCancelled) { enterUnlisten(); return; }
+      unlistenEnter = enterUnlisten;
+
+      const leaveUnlisten = await listen<null>("tauri://drag-leave", () => {
+        if (isCancelled) return;
+        setIsDragOver(false);
+      });
+      if (isCancelled) { leaveUnlisten(); return; }
+      unlistenLeave = leaveUnlisten;
+    };
+
+    setupListeners();
+
+    // Prevent default browser behavior for drag/drop
+    const preventDefault = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (disabled) return;
+    };
 
-      e.dataTransfer.dropEffect = "copy";
-    },
-    [disabled]
-  );
+    window.addEventListener("dragover", preventDefault);
+    window.addEventListener("drop", preventDefault);
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (disabled) return;
-
-      setIsDragOver(false);
-      setDragCounter(0);
-
-      const files = Array.from(e.dataTransfer.files);
-
-      // Filter for image files
-      const imageFiles = files.filter((file) =>
-        file.type.startsWith("image/") ||
-        /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i.test(file.name)
-      );
-
-      const skippedCount = files.length - imageFiles.length;
-
-      // In Tauri, we need to get the file paths
-      // The File objects from drag-drop have a path property in Tauri
-      const paths = imageFiles.map((file) => {
-        // @ts-expect-error - Tauri adds path property to File objects
-        return file.path || file.name;
-      });
-
-      // Always call onFilesDropped to report results (including when no valid images)
-      onFilesDropped(paths, skippedCount);
-    },
-    [disabled, onFilesDropped]
-  );
+    return () => {
+      isCancelled = true;
+      if (unlistenDrop) unlistenDrop();
+      if (unlistenEnter) unlistenEnter();
+      if (unlistenLeave) unlistenLeave();
+      window.removeEventListener("dragover", preventDefault);
+      window.removeEventListener("drop", preventDefault);
+    };
+  }, [disabled]); // Remove onFilesDropped from deps - use ref instead
 
   return (
-    <div
-      className="relative flex-1 flex flex-col"
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
+    <div className="relative flex-1 flex flex-col">
       {children}
 
       {/* Drop Overlay */}
       {isDragOver && (
-        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center">
+        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center backdrop-blur-[1px] pointer-events-none">
           <div className="text-center">
-            <Upload className="w-12 h-12 mx-auto mb-3 text-primary" />
+            <Upload className="w-12 h-12 mx-auto mb-3 text-primary animate-bounce" />
             <p className="text-lg font-medium text-primary">Drop images here</p>
             <p className="text-sm text-text-muted mt-1">
-              Release to import images into your library
+              Release to import into library
             </p>
           </div>
         </div>

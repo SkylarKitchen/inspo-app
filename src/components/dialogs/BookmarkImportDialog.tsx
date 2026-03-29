@@ -17,12 +17,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import * as tauri from "@/lib/tauri";
-import type { Folder, Tag } from "@/types";
+import type { Item, Folder, Tag } from "@/types";
 
 interface BookmarkImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onImported: (item: tauri.Item) => void;
+  onImported: (item: Item) => void;
   folders: Folder[];
   tags: Tag[];
   currentFolderId: string | null;

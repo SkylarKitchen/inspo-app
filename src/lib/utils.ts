@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -32,5 +33,19 @@ export function getDomainFromUrl(url: string): string {
     return urlObj.hostname.replace("www.", "");
   } catch {
     return url;
+  }
+}
+
+/**
+ * Converts a local file path to a URL that can be loaded by the webview.
+ * Uses Tauri's official convertFileSrc for proper platform handling.
+ */
+export function convertToLocalSrc(filePath: string): string {
+  try {
+    return convertFileSrc(filePath);
+  } catch {
+    // Fallback for non-Tauri context
+    const path = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    return `http://asset.localhost${path}`;
   }
 }

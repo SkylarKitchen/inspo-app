@@ -99,6 +99,86 @@
   }
 }
 
+/* Dark theme - warm, not pure black */
+[data-theme="dark"] {
+  --color-background: #1A1816;
+  --color-background-warm: #1E1C19;
+  --color-surface: #252320;
+  --color-surface-hover: #2E2B27;
+  --color-surface-active: #38342F;
+  --color-border: #3D3833;
+  --color-border-subtle: #2E2B27;
+
+  /* Inverted text - warm cream */
+  --color-text: #F5F2ED;
+  --color-text-muted: #A8A19A;
+  --color-text-subtle: #6B6560;
+
+  /* Terracotta primary - slightly brighter for dark mode */
+  --color-primary: #D4715A;
+  --color-primary-hover: #E08570;
+  --color-primary-muted: #9A5744;
+  --color-primary-subtle: #332420;
+
+  /* Chartreuse accent - same punch in dark mode */
+  --color-accent: #BFFF00;
+  --color-accent-muted: #8FB800;
+  --color-accent-subtle: #2A3300;
+
+  /* Semantic colors - adjusted for dark */
+  --color-success: #5BB87F;
+  --color-warning: #E0A44D;
+  --color-danger: #D4715A;
+  --color-favorite: #D4715A;
+
+  /* Sidebar - slightly lighter than background */
+  --color-sidebar: #1E1C19;
+  --color-sidebar-hover: #2E2B27;
+  --color-sidebar-active: #D4715A;
+
+  /* Warm shadows for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.4), 0 4px 8px -2px rgb(0 0 0 / 0.25);
+  --shadow-card: 0 2px 8px -2px rgb(0 0 0 / 0.2), 0 0 0 1px rgb(255 255 255 / 0.03);
+  --shadow-card-hover: 0 8px 24px -4px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(212 113 90 / 0.25);
+}
+
+/* System theme preference support */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --color-background: #1A1816;
+    --color-background-warm: #1E1C19;
+    --color-surface: #252320;
+    --color-surface-hover: #2E2B27;
+    --color-surface-active: #38342F;
+    --color-border: #3D3833;
+    --color-border-subtle: #2E2B27;
+    --color-text: #F5F2ED;
+    --color-text-muted: #A8A19A;
+    --color-text-subtle: #6B6560;
+    --color-primary: #D4715A;
+    --color-primary-hover: #E08570;
+    --color-primary-muted: #9A5744;
+    --color-primary-subtle: #332420;
+    --color-accent: #BFFF00;
+    --color-accent-muted: #8FB800;
+    --color-accent-subtle: #2A3300;
+    --color-success: #5BB87F;
+    --color-warning: #E0A44D;
+    --color-danger: #D4715A;
+    --color-favorite: #D4715A;
+    --color-sidebar: #1E1C19;
+    --color-sidebar-hover: #2E2B27;
+    --color-sidebar-active: #D4715A;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+    --shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.4), 0 4px 8px -2px rgb(0 0 0 / 0.25);
+    --shadow-card: 0 2px 8px -2px rgb(0 0 0 / 0.2), 0 0 0 1px rgb(255 255 255 / 0.03);
+    --shadow-card-hover: 0 8px 24px -4px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(212 113 90 / 0.25);
+  }
+}
+
 /* Base styles */
 * {
   box-sizing: border-box;
@@ -164,7 +244,8 @@ body::before {
 }
 
 /* Tauri window drag region */
-.titlebar-drag-region {
+.titlebar-drag-region,
+[data-tauri-drag-region] {
   -webkit-app-region: drag;
 }
 

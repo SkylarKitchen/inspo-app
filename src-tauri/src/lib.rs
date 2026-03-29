@@ -41,6 +41,13 @@ pub fn run() {
             commands::items::toggle_favorite,
             commands::items::move_items_to_folder,
             commands::items::delete_items,
+            // Trash commands
+            commands::items::soft_delete_items,
+            commands::items::get_trashed_items,
+            commands::items::get_trash_count,
+            commands::items::restore_items,
+            commands::items::permanent_delete_items,
+            commands::items::empty_trash,
             // Folder commands
             commands::folders::get_folders,
             commands::folders::create_folder,

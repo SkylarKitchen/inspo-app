@@ -2,9 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "shell:allow-open",
     "dialog:default",
     "dialog:allow-open",
@@ -23,7 +26,8 @@
         "$HOME/**",
         "$DOCUMENT/**",
         "$DESKTOP/**",
-        "$DOWNLOAD/**"
+        "$DOWNLOAD/**",
+        "$HOME/Library/Mobile Documents/**"
       ]
     }
   ]
